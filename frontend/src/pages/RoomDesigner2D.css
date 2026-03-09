@@ -1,0 +1,131 @@
+:root {
+  --ew-bg: #151213;
+  --ew-panel: #201a1a;
+  --ew-panel-alt: #292020;
+  --ew-border: #393030;
+  --ew-accent: #e3b566;
+  --ew-accent-soft: #7a5a2a;
+  --ew-text: #f4e3c4;
+  --ew-text-muted: #b09a7a;
+  --ew-danger: #e4584e;
+}
+
+body {
+  background-color: var(--ew-bg);
+  color: var(--ew-text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Panels */
+.ew-panel {
+  background-color: var(--ew-panel);
+  border-radius: 8px;
+  border: 1px solid var(--ew-border);
+}
+
+/* Header bar */
+.ew-topbar {
+  background-color: #1b1516;
+  border-bottom: 1px solid var(--ew-border);
+}
+
+/* Section titles */
+.ew-section-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ew-text-muted);
+}
+
+/* Accent buttons */
+.btn-ew-accent {
+  background: var(--ew-accent);
+  border: none;
+  color: #1b1516;
+  font-weight: 600;
+}
+
+.btn-ew-accent:hover {
+  background: var(--ew-accent-soft);
+}
+
+/* 2D canvas area */
+.ew-room-canvas {
+  position: relative;
+  background-color: #181313;
+  border-radius: 12px;
+  border: 1px solid var(--ew-border);
+  min-height: 420px;
+  overflow: hidden;
+}
+
+/* Grid dots using CSS background */
+.ew-room-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(#2a2222 1px, transparent 0);
+  background-size: 18px 18px;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Actual room rectangle */
+.ew-room-rect {
+  position: absolute;
+  border-radius: 6px;
+  border: 2px solid #4d88ff;
+  background-color: #2a1d1a;
+}
+
+/* Furniture tiles */
+.ew-furniture-item {
+  position: absolute;
+  border-radius: 6px;
+  background-color: #e3b566;
+  color: #1b1516;
+  cursor: move;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.ew-furniture-item.selected {
+  box-shadow: 0 0 0 3px #ffffff33;
+}
+
+/* Left catalog list items */
+.ew-list-tile {
+  background-color: var(--ew-panel-alt);
+  border-radius: 8px;
+  border: 1px solid var(--ew-border);
+  cursor: pointer;
+}
+
+.ew-list-tile:hover {
+  border-color: var(--ew-accent-soft);
+}
+
+/* Color swatch buttons */
+.ew-color-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.ew-color-swatch.selected {
+  border-color: var(--ew-accent);
+}
+
+/* Object inspector footer delete */
+.btn-ew-danger {
+  background: var(--ew-danger);
+  border: none;
+}
+
+.btn-ew-danger:hover {
+  background: #b63b34;
+}

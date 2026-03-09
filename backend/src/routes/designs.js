@@ -4,6 +4,24 @@ import { requireAuth, requireAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+router.get("/public/:id", async (req, res) => {
+  try {
+    const design = await Design.findById(req.params.id);
+    if (!design) return res.status(404).json({ message: "Not found" });
+    // return public fields only
+    res.json({
+      _id: design._id,
+      name: design.name,
+      roomType: design.roomType,
+      room: design.room,
+      furniture: design.furniture,
+      updatedAt: design.updatedAt,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // User: get own designs
 router.get("/", requireAuth, async (req, res) => {
   const query = req.user.role === "admin" ? {} : { ownerId: req.user.id };

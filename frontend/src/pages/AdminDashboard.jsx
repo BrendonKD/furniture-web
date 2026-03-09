@@ -7,15 +7,31 @@ const AdminDashboard = () => {
   const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const userName = "Elias (Admin)";  // From auth
+  const userName = "Elias (Admin)"; 
 
   useEffect(() => {
     const fetchDesigns = async () => {
       try {
-        const res = await api.get("/api/designs");  // All designs for admin
-        setDesigns(res.data);
+        // Add explicit token to bypass axios interceptor issues
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${process.env.REACT_APP_API_BASE}/designs`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        
+        if (!res.ok) {
+          console.error("Admin fetch failed:", res.status);
+          setDesigns([]); // Show empty table instead of crashing
+          return;
+        }
+        
+        const data = await res.json();
+        setDesigns(data);
       } catch (err) {
-        console.error(err);
+        console.error("Admin fetch error:", err);
+        setDesigns([]); // Graceful fallback
       } finally {
         setLoading(false);
       }
@@ -23,8 +39,9 @@ const AdminDashboard = () => {
     fetchDesigns();
   }, []);
 
+  // Fix: Use design.name instead of non-existent customerName
   const filteredDesigns = designs.filter(design => 
-    design.customerName.toLowerCase().includes(search.toLowerCase())
+    design.name?.toLowerCase().includes(search.toLowerCase())
   );
 
   if (loading) return <div className="loading">Loading admin panel...</div>;
@@ -66,7 +83,11 @@ const AdminDashboard = () => {
               </Link>
               <Link to="/admin/furniture" className="btn-secondary">
                 <span className="material-icons-round">inventory_2</span>
-                Browse designs
+                Browse Furniture
+              </Link>
+              <Link to="/admin/add-furniture" className="btn-add">
+                <span className="material-icons-round">add</span>
+                Add Furniture
               </Link>
             </div>
           </div>
@@ -80,7 +101,7 @@ const AdminDashboard = () => {
             </div>
             <div className="stat-info">
               <span className="stat-label">Total</span>
-              <span className="stat-value">124</span>
+              <span className="stat-value">{designs.length}</span>
             </div>
           </div>
           <div className="stat-card">
@@ -88,7 +109,7 @@ const AdminDashboard = () => {
               <span className="material-icons-round">timeline</span>
             </div>
             <div className="stat-info">
-              <span className="stat-label">18 this week</span>
+              <span className="stat-label">This week</span>
               <span className="stat-value">18</span>
             </div>
           </div>
@@ -103,20 +124,25 @@ const AdminDashboard = () => {
           </div>
         </section>
 
+        {/* Search Bar */}
+        <div className="search-container">
+          <input
+            type="text"
+            placeholder="Search designs..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="search-input"
+          />
+        </div>
+
         {/* Design Library Table */}
         <section className="table-section">
           <div className="table-header">
             <h2>Design Library</h2>
-            <div className="table-actions">
-              <Link to="/admin/add-furniture" className="btn-add">
-                <span className="material-icons-round">add</span>
-                Add Furniture
-              </Link>
-            </div>
+            <span className="count">{filteredDesigns.length} designs</span>
           </div>
 
           <div className="table-container">
-            
             <table>
               <thead>
                 <tr>
@@ -131,18 +157,18 @@ const AdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredDesigns.slice(0, 5).map((design, i) => (  // Show 5 like screenshot
-                  <tr key={i}>
+                {filteredDesigns.slice(0, 5).map((design, i) => (
+                  <tr key={design._id || i}>
                     <td>
                       <div className="furniture-item">
                         <div className="thumb" />
-                        <span>{design.name}</span>
+                        <span>{design.name || "Unnamed"}</span>
                       </div>
                     </td>
                     <td>12</td>
                     <td><span className="status in-progress">In Progress</span></td>
-                    <td>James Wilson</td>
-                    <td>2h ago</td>
+                    <td>{design.ownerId?.name || "Unknown"}</td>
+                    <td>{design.updatedAt ? new Date(design.updatedAt).toLocaleString() : "Never"}</td>
                     <td><span className="status-badge blue">Customer required</span></td>
                     <td className="notes">Scandinavian master...</td>
                     <td>
@@ -157,6 +183,13 @@ const AdminDashboard = () => {
                     </td>
                   </tr>
                 ))}
+                {filteredDesigns.length === 0 && (
+                  <tr>
+                    <td colSpan="8" className="no-data">
+                      No designs found. Create some in Room Designer first.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

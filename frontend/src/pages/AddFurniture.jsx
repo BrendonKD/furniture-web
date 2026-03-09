@@ -1,31 +1,32 @@
-import React, { useState, useRef, Suspense, useLayoutEffect } from "react";
+import React, { useState, useRef, Suspense, useLayoutEffect, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, useGLTF } from "@react-three/drei";
+import { OrbitControls, useGLTF, Center, Bounds } from "@react-three/drei";
 import api from "../api/axiosInstance";
 import "./AddFurniture.css";
 
+// ✅ FIX: Separate component so useGLTF only runs when a URL exists
 function ModelPreview({ glbUrl }) {
   const { scene } = useGLTF(glbUrl);
-  
-  // Auto-fix model positioning, materials, shadows
+
   useLayoutEffect(() => {
     scene.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
-        child.material.envMapIntensity = 1;
-        // Fix dark materials
         if (child.material) child.material.needsUpdate = true;
       }
     });
-    // Auto-center + scale
-    scene.scale.setScalar(1.2);
-    scene.rotation.y = Math.PI / 4;
-    scene.position.set(0, -0.3, 0);
   }, [scene]);
 
-  return <primitive object={scene} dispose={null} />;
+  // ✅ Use Bounds to auto-fit any model size into view — no manual scale/position needed
+  return (
+    <Bounds fit clip observe>
+      <Center>
+        <primitive object={scene} dispose={null} />
+      </Center>
+    </Bounds>
+  );
 }
 
 const AddFurniture = () => {
@@ -44,15 +45,24 @@ const AddFurniture = () => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef();
 
+  // ✅ FIX: Revoke object URL on unmount to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file && /\.(glb|gltf)$/i.test(file.name)) {
+      // Revoke previous URL before creating new one
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setUploadedFileName(file.name);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
     } else {
       alert("Please select a .glb or .gltf file");
-      e.target.value = "";  // Clear invalid selection
+      e.target.value = "";
     }
   };
 
@@ -62,26 +72,25 @@ const AddFurniture = () => {
       alert("Please upload a 3D model first");
       return;
     }
-
     setUploading(true);
-
     const formData = new FormData();
-    formData.append('name', form.name);
-    formData.append('category', form.category);
-    formData.append('price', form.price);
-    formData.append('sku', form.sku);
-    formData.append('inventoryStatus', form.inventoryStatus);
-    formData.append('dimensions', JSON.stringify(form.dimensions));
-    formData.append('description', form.description);
-    formData.append('glbFile', fileInputRef.current.files[0]);
-
+    formData.append("name", form.name);
+    formData.append("category", form.category);
+    formData.append("price", form.price);
+    formData.append("sku", form.sku);
+    formData.append("inventoryStatus", form.inventoryStatus);
+    formData.append("dimensions", JSON.stringify(form.dimensions));
+    formData.append("description", form.description);
+    formData.append("glbFile", fileInputRef.current.files[0]);
     try {
-      await api.post("/admin/furniture", formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000  // Handles large GLB files
+      // ✅ FIX: baseURL is already "http://localhost:5000/api"
+      // so just use "admin/furniture" not "/api/admin/furniture"
+      await api.post("admin/furniture", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 60000,
       });
       alert("✅ Furniture added to inventory!");
-      navigate("/admin");
+      navigate("/admin/furniture");
     } catch (err) {
       console.error("Upload error:", err);
       alert(`❌ Failed: ${err.response?.data?.message || err.message}`);
@@ -107,9 +116,8 @@ const AddFurniture = () => {
       {/* Main Form */}
       <form onSubmit={handleSubmit} className="furniture-form">
         <div className="form-row">
-          {/* Left Column - Form Fields */}
+          {/* Left Column */}
           <div className="form-column">
-            {/* General Information */}
             <div className="form-section">
               <h2>General Information</h2>
               <div className="input-group">
@@ -159,13 +167,12 @@ const AddFurniture = () => {
                   value={form.sku}
                   onChange={(e) => setForm({ ...form, sku: e.target.value })}
                 />
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="sku-btn"
-                  onClick={() => setForm({
-                    ...form, 
-                    sku: `FVT-${Date.now().toString().slice(-6)}`
-                  })}
+                  onClick={() =>
+                    setForm({ ...form, sku: `FVT-${Date.now().toString().slice(-6)}` })
+                  }
                 >
                   Auto Generate
                 </button>
@@ -175,10 +182,9 @@ const AddFurniture = () => {
                   <input
                     type="checkbox"
                     checked={form.inventoryStatus}
-                    onChange={(e) => setForm({
-                      ...form,
-                      inventoryStatus: e.target.checked
-                    })}
+                    onChange={(e) =>
+                      setForm({ ...form, inventoryStatus: e.target.checked })
+                    }
                   />
                   <span className="toggle-slider"></span>
                   In Stock
@@ -190,48 +196,24 @@ const AddFurniture = () => {
             <div className="form-section">
               <h2>Dimensions (cm)</h2>
               <div className="dimension-grid">
-                <div className="dimension-input">
-                  <label>Width</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    placeholder="120"
-                    value={form.dimensions.width}
-                    onChange={(e) => setForm({
-                      ...form,
-                      dimensions: { ...form.dimensions, width: e.target.value }
-                    })}
-                  />
-                </div>
-                <div className="dimension-input">
-                  <label>Height</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    placeholder="80"
-                    value={form.dimensions.height}
-                    onChange={(e) => setForm({
-                      ...form,
-                      dimensions: { ...form.dimensions, height: e.target.value }
-                    })}
-                  />
-                </div>
-                <div className="dimension-input">
-                  <label>Depth</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    placeholder="90"
-                    value={form.dimensions.depth}
-                    onChange={(e) => setForm({
-                      ...form,
-                      dimensions: { ...form.dimensions, depth: e.target.value }
-                    })}
-                  />
-                </div>
+                {["width", "height", "depth"].map((dim) => (
+                  <div className="dimension-input" key={dim}>
+                    <label>{dim.charAt(0).toUpperCase() + dim.slice(1)}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder="0"
+                      value={form.dimensions[dim]}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          dimensions: { ...form.dimensions, [dim]: e.target.value },
+                        })
+                      }
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -251,7 +233,7 @@ const AddFurniture = () => {
                   type="file"
                   accept=".glb,.gltf"
                   onChange={handleFileChange}
-                  style={{ display: 'none' }}
+                  style={{ display: "none" }}
                 />
                 {uploadedFileName && (
                   <div className="file-info">
@@ -260,63 +242,64 @@ const AddFurniture = () => {
                   </div>
                 )}
               </div>
-              <div className="model-canvas">
-  {previewUrl ? (
-    <Suspense fallback={
-      <div className="loading-3d">
-        <span className="material-icons-round">hourglass_empty</span>
-        Loading 3D model...
-      </div>
-    }>
-      {/* ✅ PRODUCTION Canvas - Shows ANY GLB */}
-      <Canvas 
-        camera={{ position: [5, 3, 5], fov: 60 }}  // Wider view
-        gl={{ 
-          preserveDrawingBuffer: true, 
-          antialias: true,
-          powerPreference: "high-performance"
-        }}
-        shadows
-        frameloop="demand"
-        style={{ background: '#1a1a1a' }}  // Dark bg fallback
-      >
-        {/* Essential: Grid + Axes for debugging */}
-        <gridHelper args={[10, 10]} position={[0, -1, 0]} />
-        <axesHelper scale={2} />
-        
-        {/* Full lighting setup */}
-        <ambientLight intensity={0.4} />
-        <directionalLight 
-          position={[10, 10, 5]} 
-          intensity={1.5} 
-          castShadow 
-          shadow-mapSize={[2048, 2048]}
-        />
-        <pointLight position={[-5, 5, -5]} intensity={0.5} />
-        
-        {/* FIXED Model - receives shadows + auto-scale */}
-        <ModelPreview glbUrl={previewUrl} />
-        
-        {/* Smooth controls */}
-        <OrbitControls 
-          enablePan={false}
-          enableZoom={true}
-          minDistance={1}
-          maxDistance={10}
-          autoRotate
-          autoRotateSpeed={1}
-        />
-      </Canvas>
-    </Suspense>
-  ) : (
-    <div className="canvas-placeholder">
-      <span className="material-icons-round">3d_rotation</span>
-      <p>Upload .GLB model to preview here</p>
-    </div>
-  )}
-</div>
 
+              <div className="model-canvas">
+                {previewUrl ? (
+                  <Suspense
+                    fallback={
+                      <div className="loading-3d">
+                        <span className="material-icons-round">hourglass_empty</span>
+                        Loading 3D model...
+                      </div>
+                    }
+                  >
+                    <Canvas
+                      camera={{ position: [0, 0, 5], fov: 50 }}
+                      gl={{
+                        antialias: true,
+                        powerPreference: "high-performance",
+                      }}
+                      shadows
+                      // ✅ FIX: use "always" not "demand" when autoRotate is on
+                      // "demand" + autoRotate causes context loss because
+                      // OrbitControls requests frames outside React's render cycle
+                      frameloop="always"
+                      style={{ background: "#1a1a1a" }}
+                    >
+                      <ambientLight intensity={0.5} />
+                      <directionalLight
+                        position={[5, 10, 5]}
+                        intensity={1.5}
+                        castShadow
+                        shadow-mapSize={[2048, 2048]}
+                      />
+                      <pointLight position={[-5, 5, -5]} intensity={0.4} />
+                      <hemisphereLight
+                        skyColor={0xffffff}
+                        groundColor={0x444444}
+                        intensity={0.3}
+                      />
+
+                      <ModelPreview glbUrl={previewUrl} />
+
+                      <OrbitControls
+                        enablePan={false}
+                        enableZoom={true}
+                        minDistance={1}
+                        maxDistance={20}
+                        autoRotate
+                        autoRotateSpeed={1.5}
+                      />
+                    </Canvas>
+                  </Suspense>
+                ) : (
+                  <div className="canvas-placeholder">
+                    <span className="material-icons-round">3d_rotation</span>
+                    <p>Upload .GLB model to preview here</p>
+                  </div>
+                )}
               </div>
+            </div>
           </div>
         </div>
 
@@ -326,7 +309,7 @@ const AddFurniture = () => {
             <label>Product Narrative</label>
             <textarea
               rows="4"
-              placeholder="Describe the materials, craftsmanship, and story behind this piece. Highlight unique features and design inspiration..."
+              placeholder="Describe the materials, craftsmanship, and story behind this piece..."
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
@@ -336,16 +319,16 @@ const AddFurniture = () => {
 
         {/* Actions */}
         <div className="form-actions">
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="cancel-btn"
             onClick={() => navigate("/admin")}
             disabled={uploading}
           >
             Cancel
           </button>
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="add-btn"
             disabled={uploading || !previewUrl}
           >
