@@ -1,13 +1,67 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams, Link } from "react-router-dom";
 import { HexColorPicker } from "react-colorful";
 import "./RoomDesigner2D.css";
 
-const API_BASE = "http://localhost:5000/api"; // adjust to your backend
-const SCALE = 40; // pixels per metre
-const WALL_MARGIN_M = 0.2; // 20cm buffer from each wall
+const API_BASE = "http://localhost:5000/api";
+const SCALE = 40;
+const WALL_MARGIN_M = 0.2;
+const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+
+const getFurnitureDimsM = (catalogItem) => {
+  const width = (Number(catalogItem?.dimensions?.width) || 100) / 100;
+  const depth = (Number(catalogItem?.dimensions?.depth) || 100) / 100;
+
+  return { width, depth };
+};
+
+const getFootprintM = (furnitureItem, catalogMap) => {
+  const catalogItem = catalogMap.get(String(furnitureItem.furnitureId));
+  const { width, depth } = getFurnitureDimsM(catalogItem);
+
+  const rotation = ((Number(furnitureItem.rotation) || 0) % 180 + 180) % 180;
+
+  const rotated = rotation === 90;
+
+  return {
+    width: rotated ? depth : width,
+    depth: rotated ? width : depth,
+  };
+};
+
+const isOverlapping = (candidate, others, catalogMap) => {
+  const a = getFootprintM(candidate, catalogMap);
+
+  const aLeft = candidate.x - a.width / 2;
+  const aRight = candidate.x + a.width / 2;
+  const aTop = candidate.y - a.depth / 2;
+  const aBottom = candidate.y + a.depth / 2;
+
+  return others.some((other) => {
+    const b = getFootprintM(other, catalogMap);
+
+    const bLeft = other.x - b.width / 2;
+    const bRight = other.x + b.width / 2;
+    const bTop = other.y - b.depth / 2;
+    const bBottom = other.y + b.depth / 2;
+
+    const separated =
+      aRight <= bLeft ||
+      aLeft >= bRight ||
+      aBottom <= bTop ||
+      aTop >= bBottom;
+
+    return !separated;
+  });
+};
 
 export default function RoomDesigner2D({ initialDesignId, ownerId }) {
-  const [designId, setDesignId] = useState(initialDesignId || null);
+  const [searchParams] = useSearchParams();
+  const urlDesignId = searchParams.get("designId");
+
+  const activeDesignId = initialDesignId || urlDesignId || null;
+
+  const [designId, setDesignId] = useState(activeDesignId);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -24,7 +78,7 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
       wallColor: "#2a1f1c",
       floorColor: "#3b2316",
     },
-    furniture: [], // items: { furnitureId, type, x, y, rotation, scale, baseSize }
+    furniture: [],
   });
 
   const [selectedIndex, setSelectedIndex] = useState(null);
@@ -39,43 +93,21 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
   const selectedItem =
     selectedIndex != null ? design.furniture[selectedIndex] : null;
 
+  const catalogMap = useMemo(() => {
+  const map = new Map();
+  furnitureCatalog.forEach((item) => map.set(String(item._id), item));
+  return map;
+}, [furnitureCatalog]);
+
+
   const roomLength = design.room.length || 1;
   const roomWidth = design.room.width || 1;
 
-  // -------- Load furniture catalogue ----------
-  useEffect(() => {
-    const loadFurniture = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/furniture`);
-        const data = await res.json();
-        setFurnitureCatalog(data);
-      } catch (err) {
-        console.error("Failed to load furniture", err);
-      }
-    };
-    loadFurniture();
-  }, []);
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-  // -------- Load existing design (edit mode) ----------
-  useEffect(() => {
-    const loadDesign = async () => {
-      if (!initialDesignId) return;
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_BASE}/designs/${initialDesignId}`);
-        const data = await res.json();
-        setDesign(data);
-        setDesignId(data._id);
-      } catch (err) {
-        console.error("Failed to load design", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadDesign();
-  }, [initialDesignId]);
+  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
 
-  // -------- Helpers to update design state ----------
   const updateDesign = (patch) =>
     setDesign((prev) => ({
       ...prev,
@@ -91,34 +123,102 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
   const updateFurnitureAt = (index, patch) =>
     setDesign((prev) => {
       const copy = [...prev.furniture];
+      if (!copy[index]) return prev;
       copy[index] = { ...copy[index], ...patch };
       return { ...prev, furniture: copy };
     });
 
-  // -------- Add furniture item (position in metres) ----------
+  useEffect(() => {
+    const loadFurniture = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/furniture`);
+        const data = await res.json();
+        setFurnitureCatalog(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load furniture", err);
+        setFurnitureCatalog([]);
+      }
+    };
+    loadFurniture();
+  }, []);
+
+  useEffect(() => {
+    const loadDesign = async () => {
+      if (!activeDesignId) return;
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/designs/public/${activeDesignId}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load design: ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        setDesign({
+          name: data.name || "Untitled Design",
+          roomType: data.roomType || "Living Room",
+          status: data.status || "draft",
+          notes: data.notes || "",
+          room: {
+            length: data.room?.length ?? 12.5,
+            width: data.room?.width ?? 8.4,
+            height: data.room?.height ?? 3.2,
+            wallColor: data.room?.wallColor || "#2a1f1c",
+            floorColor: data.room?.floorColor || "#3b2316",
+          },
+          furniture: Array.isArray(data.furniture) ? data.furniture : [],
+          ownerId: data.ownerId,
+        });
+
+        setDesignId(data._id);
+        setSelectedIndex(null);
+      } catch (err) {
+        console.error("Failed to load design", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDesign();
+  }, [activeDesignId]);
+
   const addFurnitureToRoom = (item) => {
     const length = roomLength || 1;
     const width = roomWidth || 1;
 
+    const dims = getFurnitureDimsM(item);
+
     const newItem = {
       furnitureId: item._id,
       type: item.category,
-      // position in metres, roughly in middle
       x: length / 2,
       y: width / 2,
-      rotation: 0, // degrees
+      rotation: 0,
       scale: 1,
       baseSize: 1.0,
     };
+
+    const halfW = dims.width / 2;
+    const halfD = dims.depth / 2;
+
+    newItem.x = clamp(newItem.x, WALL_MARGIN_M + halfW, length - WALL_MARGIN_M - halfW);
+    newItem.y = clamp(newItem.y, WALL_MARGIN_M + halfD, width - WALL_MARGIN_M - halfD);
+
+    const hasOverlap = isOverlapping(newItem, design.furniture, catalogMap);
+    if (hasOverlap) {
+      alert("Cannot place furniture here because it overlaps another item.");
+      return;
+    }
 
     setDesign((prev) => ({
       ...prev,
       furniture: [...prev.furniture, newItem],
     }));
+
     setSelectedIndex(design.furniture.length);
   };
 
-  // -------- Drag handling (works in metres) ----------
+
   const beginDrag = (e, index) => {
     e.stopPropagation();
     if (!canvasRef.current) return;
@@ -145,12 +245,10 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
     window.addEventListener("mouseup", endDrag);
   };
 
-  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
-
   const onDrag = (e) => {
     if (dragRef.current.index == null || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
 
+    const rect = canvasRef.current.getBoundingClientRect();
     const mouseXpx = e.clientX - rect.left;
     const mouseYpx = e.clientY - rect.top;
 
@@ -162,11 +260,27 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
     const rawX = mouseXM - offsetXM;
     const rawY = mouseYM - offsetYM;
 
-    const maxX = roomLength - WALL_MARGIN_M;
-    const maxY = roomWidth - WALL_MARGIN_M;
+    const item = design.furniture[index];
+    if (!item) return;
 
-    const newXM = clamp(rawX, WALL_MARGIN_M, maxX);
-    const newYM = clamp(rawY, WALL_MARGIN_M, maxY);
+    const footprint = getFootprintM(item, catalogMap);
+    const halfW = footprint.width / 2;
+    const halfD = footprint.depth / 2;
+
+    const minX = WALL_MARGIN_M + halfW;
+    const maxX = roomLength - WALL_MARGIN_M - halfW;
+    const minY = WALL_MARGIN_M + halfD;
+    const maxY = roomWidth - WALL_MARGIN_M - halfD;
+
+    const newXM = clamp(rawX, minX, maxX);
+    const newYM = clamp(rawY, minY, maxY);
+
+    const candidate = { ...item, x: newXM, y: newYM };
+    const others = design.furniture.filter((_, i) => i !== index);
+
+    if (isOverlapping(candidate, others, catalogMap)) {
+      return;
+    }
 
     setDesign((prev) => {
       const copy = [...prev.furniture];
@@ -179,6 +293,7 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
       return { ...prev, furniture: copy };
     });
   };
+
 
   const endDrag = () => {
     dragRef.current = { index: null, offsetXM: 0, offsetYM: 0 };
@@ -196,12 +311,6 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
     setSelectedIndex(null);
   };
 
-  // -------- Save / Update design ----------
-
-  const token = typeof window !== "undefined"
-  ? localStorage.getItem("token")
-  : null;
-  
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -230,7 +339,8 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
       }
 
       const saved = await res.json();
-      if (!designId) setDesignId(saved._id);
+      setDesignId(saved._id);
+      alert("Design saved successfully.");
     } catch (err) {
       console.error("Failed to save design", err);
       alert("Server error while saving design.");
@@ -238,7 +348,6 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
       setSaving(false);
     }
   };
-
 
   if (loading) {
     return (
@@ -248,23 +357,35 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
 
   return (
     <div className="container-fluid text-light p-0">
-      {/* Top bar */}
       <div className="ew-topbar d-flex align-items-center justify-content-between px-4 py-2">
         <div className="d-flex align-items-center gap-2">
           <span className="material-icons-round text-warning">chair</span>
           <span className="fw-semibold">Everwood &amp; Co.</span>
           <span className="text-secondary small">/ Room Designer</span>
         </div>
+
         <div className="d-flex align-items-center gap-2">
-          <button className="btn btn-sm btn-outline-secondary text-light border-0">
-            <span className="material-icons-round me-1" style={{ fontSize: 18 }}>
-              dashboard
-            </span>
-            Exit to dashboard
-          </button>
+          
+              <Link
+                to={designId ? `/room-3d?designId=${designId}` : "#"}
+                className={`btn btn-sm btn-outline-warning ${!designId ? "disabled" : ""}`}
+                onClick={(e) => {
+                  if (!designId) {
+                    e.preventDefault();
+                    alert("Please save the design first.");
+                  }
+                }}
+              >
+                <span className="material-icons-round me-1" style={{ fontSize: 18 }}>
+                  view_in_ar
+                </span>
+                3D Room View
+              </Link>
+
           <button className="btn btn-sm btn-outline-secondary text-light border-0">
             Save as new
           </button>
+
           <button
             className="btn btn-sm btn-ew-accent"
             onClick={handleSave}
@@ -272,13 +393,20 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
           >
             {saving ? "Saving..." : "Save"}
           </button>
+          <Link
+            to="/admin"
+            className="btn btn-sm btn-outline-secondary text-light border-0"
+          >
+            <span className="material-icons-round me-1" style={{ fontSize: 18 }}>
+              dashboard
+            </span>
+            Back to dashboard
+          </Link>
         </div>
       </div>
 
       <div className="row g-3 p-3">
-        {/* LEFT PANEL */}
         <div className="col-3">
-          {/* Basic info */}
           <div className="ew-panel p-3 mb-3">
             <div className="ew-section-title mb-2">Basic info</div>
             <div className="mb-2">
@@ -309,14 +437,11 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
             </div>
           </div>
 
-          {/* Dimensions */}
           <div className="ew-panel p-3 mb-3">
             <div className="ew-section-title mb-2">Dimensions (m)</div>
             <div className="row g-2">
               <div className="col-4">
-                <label className="form-label small text-secondary">
-                  Length
-                </label>
+                <label className="form-label small text-secondary">Length</label>
                 <input
                   type="number"
                   step="0.1"
@@ -328,9 +453,7 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                 />
               </div>
               <div className="col-4">
-                <label className="form-label small text-secondary">
-                  Width
-                </label>
+                <label className="form-label small text-secondary">Width</label>
                 <input
                   type="number"
                   step="0.1"
@@ -342,9 +465,7 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                 />
               </div>
               <div className="col-4">
-                <label className="form-label small text-secondary">
-                  Height
-                </label>
+                <label className="form-label small text-secondary">Height</label>
                 <input
                   type="number"
                   step="0.1"
@@ -358,7 +479,6 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
             </div>
           </div>
 
-          {/* Colors with pickers */}
           <div className="ew-panel p-3 mb-3">
             <div className="ew-section-title mb-2">Colours</div>
 
@@ -385,7 +505,6 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
             </div>
           </div>
 
-          {/* Catalogue from DB */}
           <div className="ew-panel p-3">
             <div className="d-flex justify-content-between mb-2 align-items-center">
               <div className="ew-section-title mb-0">Catalogue</div>
@@ -396,6 +515,7 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                 search
               </span>
             </div>
+
             <div className="d-flex flex-column gap-2">
               {furnitureCatalog.map((item) => (
                 <div
@@ -404,7 +524,9 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                   onClick={() => addFurnitureToRoom(item)}
                 >
                   <div className="d-flex align-items-center gap-2">
-                    <span className="material-icons-round text-warning">weekend</span>
+                    <span className="material-icons-round text-warning">
+                      weekend
+                    </span>
                     <div>
                       <div className="small">{item.name}</div>
                       <div
@@ -423,16 +545,14 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                   </span>
                 </div>
               ))}
+
               {furnitureCatalog.length === 0 && (
-                <div className="text-secondary small">
-                  No furniture found.
-                </div>
+                <div className="text-secondary small">No furniture found.</div>
               )}
             </div>
           </div>
         </div>
 
-        {/* CENTER CANVAS */}
         <div className="col-5">
           <div className="d-flex justify-content-between mb-2">
             <div className="ew-section-title">2D layout</div>
@@ -455,7 +575,6 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
             className="ew-room-canvas"
             onMouseDown={() => setSelectedIndex(null)}
           >
-            {/* Room shape */}
             <RoomRect
               wallColor={design.room.wallColor}
               floorColor={design.room.floorColor}
@@ -478,9 +597,7 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                     top: topPx,
                     width: 70 * (item.scale || 1),
                     height: 70 * (item.scale || 1),
-                    transform: `translate(-50%, -50%) rotate(${
-                      item.rotation || 0
-                    }deg)`,
+                    transform: `translate(-50%, -50%) rotate(${item.rotation || 0}deg)`,
                   }}
                   onMouseDown={(e) => beginDrag(e, index)}
                   onClick={(e) => {
@@ -497,7 +614,6 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
           </div>
         </div>
 
-        {/* RIGHT PANEL */}
         <div className="col-4">
           <div className="ew-panel p-3 mb-3">
             <div className="d-flex justify-content-between align-items-center mb-2">
@@ -536,11 +652,18 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                   </div>
                   <button
                     className="btn btn-sm btn-outline-secondary border-0 text-secondary"
-                    onClick={() =>
-                      updateFurnitureAt(selectedIndex, {
-                        rotation: ((selectedItem.rotation || 0) + 45) % 360,
-                      })
-                    }
+                    onClick={() => {
+                      const newRotation = ((selectedItem.rotation || 0) + 90) % 180;
+                      const candidate = { ...selectedItem, rotation: newRotation };
+                      const others = design.furniture.filter((_, i) => i !== selectedIndex);
+
+                      if (isOverlapping(candidate, others, catalogMap)) {
+                        alert("Cannot rotate here because it would overlap another item.");
+                        return;
+                      }
+
+                      updateFurnitureAt(selectedIndex, { rotation: newRotation });
+                    }}
                   >
                     <span className="material-icons-round" style={{ fontSize: 18 }}>
                       rotate_right
@@ -599,22 +722,7 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                       }
                     />
                   </div>
-                  <div className="col-6">
-                    <label className="form-label small text-secondary">
-                      Scale
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      className="form-control form-control-sm bg-dark border-0 text-light"
-                      value={selectedItem.scale || 1}
-                      onChange={(e) =>
-                        updateFurnitureAt(selectedIndex, {
-                          scale: Number(e.target.value) || 1,
-                        })
-                      }
-                    />
-                  </div>
+                  
                 </div>
 
                 <button

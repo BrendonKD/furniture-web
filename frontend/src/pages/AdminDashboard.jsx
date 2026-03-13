@@ -12,26 +12,23 @@ const AdminDashboard = () => {
   useEffect(() => {
     const fetchDesigns = async () => {
       try {
-        // Add explicit token to bypass axios interceptor issues
-        const token = localStorage.getItem("token");
-        const res = await fetch(`${process.env.REACT_APP_API_BASE}/designs`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
+        const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
+        
+        // Use public admin endpoint - no token needed
+        const res = await fetch(`${API_BASE}/designs/admin`);
         
         if (!res.ok) {
           console.error("Admin fetch failed:", res.status);
-          setDesigns([]); // Show empty table instead of crashing
+          setDesigns([]); 
           return;
         }
         
         const data = await res.json();
+        console.log("✅ Loaded", data.length, "designs");
         setDesigns(data);
       } catch (err) {
         console.error("Admin fetch error:", err);
-        setDesigns([]); // Graceful fallback
+        setDesigns([]);
       } finally {
         setLoading(false);
       }
@@ -55,9 +52,7 @@ const AdminDashboard = () => {
             <span className="material-icons-round">chair</span>
             <h1>EVERWOOD & CO.</h1>
           </div>
-          <nav className="breadcrumb">
-            <span>Dashboard</span>
-          </nav>
+          
         </div>
         <div className="header-right">
           <div className="user-greeting">
@@ -124,16 +119,6 @@ const AdminDashboard = () => {
           </div>
         </section>
 
-        {/* Search Bar */}
-        <div className="search-container">
-          <input
-            type="text"
-            placeholder="Search designs..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="search-input"
-          />
-        </div>
 
         {/* Design Library Table */}
         <section className="table-section">
@@ -152,7 +137,6 @@ const AdminDashboard = () => {
                   <th>Owner</th>
                   <th>Last Modified</th>
                   <th>Status</th>
-                  <th>Notes</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -170,7 +154,6 @@ const AdminDashboard = () => {
                     <td>{design.ownerId?.name || "Unknown"}</td>
                     <td>{design.updatedAt ? new Date(design.updatedAt).toLocaleString() : "Never"}</td>
                     <td><span className="status-badge blue">Customer required</span></td>
-                    <td className="notes">Scandinavian master...</td>
                     <td>
                       <div className="actions">
                         <button className="action-icon">
@@ -179,6 +162,13 @@ const AdminDashboard = () => {
                         <button className="action-icon">
                           <span className="material-icons-round">delete</span>
                         </button>
+                        <Link 
+                          to={`/admin/create-session?designId=${design._id}`} 
+                          className="action-icon view"
+                          title="View Design"
+                        >
+                          <span className="material-icons-round">visibility</span>
+                        </Link>
                       </div>
                     </td>
                   </tr>

@@ -10,6 +10,8 @@ import FurnitureList from "./pages/FurnitureList";
 import FurnitureDetail from "./pages/FurnitureDetail.jsx"; 
 import FurnitureView from "./pages/FurnitureView.jsx";       // ✅ 3D viewer page of a furniture
 import RoomDesigner2D from "./pages/RoomDesigner2D.jsx";
+import Room3DView from "./pages/Room3DView.jsx";
+
 
 function App() {
   return (
@@ -23,7 +25,8 @@ function App() {
       <Route path="/admin/furniture" element={<FurnitureList />} />
       <Route path="/admin/furniture/:id" element={<FurnitureDetail />} /> 
       <Route path="/furniture/:id" element={<FurnitureView />} />    
-      <Route path="/admin/create-session" element={<RoomDesigner2D />}/>     
+      <Route path="/admin/create-session" element={<RoomDesigner2D />}/>   
+      <Route path="/room-3d" element={<Room3DView />} />  
     </Routes>
   );
 }

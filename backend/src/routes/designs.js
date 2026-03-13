@@ -4,6 +4,23 @@ import { requireAuth, requireAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+// ─── PUBLIC ADMIN: GET ALL DESIGNS (no auth) ────────────────────────────────
+router.get("/admin", async (req, res) => {
+  try {
+    const designs = await Design.find().sort({ updatedAt: -1 }).limit(20);
+    res.json(designs);
+  } catch (err) {
+    console.error("Admin designs error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Your existing auth routes stay the same...
+router.get("/", requireAuth, async (req, res) => {
+  // ...
+});
+
+
 router.get("/public/:id", async (req, res) => {
   try {
     const design = await Design.findById(req.params.id);
