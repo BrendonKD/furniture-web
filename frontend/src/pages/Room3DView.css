@@ -1,0 +1,478 @@
+/* ════════════════════════════════════════════════════
+   Room3DView.css
+   Full-viewport desktop layout for the 3D room viewer
+════════════════════════════════════════════════════ */
+
+/* ── Tokens ────────────────────────────────────────── */
+:root {
+  --r3d-bg:          #0a0a0a;
+  --r3d-surface:     #111111;
+  --r3d-surface-2:   #161616;
+  --r3d-surface-3:   #1c1c1c;
+  --r3d-border:      #1f1f1f;
+  --r3d-border-2:    #2a2a2a;
+  --r3d-accent:      #e3b566;
+  --r3d-accent-dim:  rgba(227, 181, 102, 0.1);
+  --r3d-accent-mid:  #7a5a2a;
+  --r3d-text:        #f4e3c4;
+  --r3d-text-2:      #9a8a72;
+  --r3d-text-3:      #4b4035;
+  --r3d-danger:      #e4584e;
+  --r3d-radius:      8px;
+  --r3d-radius-lg:   12px;
+  --r3d-header-h:    58px;
+  --r3d-panel-w:     300px;
+}
+
+/* ── Reset ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Shell — full viewport, no scrolling ──────────── */
+.r3d-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--r3d-bg);
+  color: var(--r3d-text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ────────────────────────────────────────── */
+.r3d-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: var(--r3d-header-h);
+  background: var(--r3d-surface);
+  border-bottom: 1px solid var(--r3d-border);
+  flex-shrink: 0;
+  z-index: 30;
+  gap: 16px;
+}
+
+.r3d-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.r3d-logo {
+  font-size: 24px;
+  color: var(--r3d-accent);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.r3d-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--r3d-text);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.r3d-subtitle {
+  font-size: 12px;
+  color: var(--r3d-text-2);
+  margin-top: 2px;
+}
+
+.r3d-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* ── Buttons ───────────────────────────────────────── */
+.r3d-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--r3d-radius);
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 0.12s, opacity 0.12s, border-color 0.12s;
+  line-height: 1;
+}
+
+.r3d-btn-accent {
+  background: var(--r3d-accent);
+  color: #1b1516;
+  font-weight: 700;
+}
+.r3d-btn-accent:hover { background: #d4a055; }
+
+.r3d-btn-outline {
+  background: transparent;
+  color: var(--r3d-text-2);
+  border: 1px solid var(--r3d-border-2);
+}
+.r3d-btn-outline:hover {
+  color: var(--r3d-text);
+  border-color: #3a3a3a;
+}
+
+/* ── Body layout ───────────────────────────────────── */
+.r3d-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Canvas wrapper ────────────────────────────────── */
+.r3d-canvas-wrap {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  background: #0b0d10;
+  /* Make the R3F Canvas fill it */
+  overflow: hidden;
+}
+
+/* R3F renders a <canvas> as a direct child — make it fill */
+.r3d-canvas-wrap > canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Canvas overlay labels */
+.r3d-canvas-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  background: rgba(227, 181, 102, 0.12);
+  color: var(--r3d-accent);
+  border: 1px solid rgba(227, 181, 102, 0.22);
+  border-radius: 6px;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+.r3d-canvas-hint {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
+
+/* ── Right side panel ──────────────────────────────── */
+.r3d-panel {
+  width: var(--r3d-panel-w);
+  flex-shrink: 0;
+  background: var(--r3d-surface);
+  border-left: 1px solid var(--r3d-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Sections ──────────────────────────────────────── */
+.r3d-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--r3d-border);
+  flex-shrink: 0;
+}
+
+.r3d-section-scroll {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.r3d-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--r3d-text-3);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Stats grid (2×2) ──────────────────────────────── */
+.r3d-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.r3d-stat {
+  background: var(--r3d-surface-2);
+  border: 1px solid var(--r3d-border);
+  border-radius: var(--r3d-radius);
+  padding: 10px 12px;
+}
+
+.r3d-stat.accent { border-color: rgba(227, 181, 102, 0.2); }
+.r3d-stat.accent .val { color: var(--r3d-accent); }
+
+.r3d-stat .val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--r3d-text);
+  line-height: 1;
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.r3d-stat .lbl {
+  font-size: 11px;
+  color: var(--r3d-text-2);
+}
+
+/* ── Color chips ───────────────────────────────────── */
+.r3d-chips {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.r3d-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--r3d-text-2);
+}
+
+.r3d-chip .dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ── Furniture count badge ─────────────────────────── */
+.r3d-count {
+  background: var(--r3d-surface-3);
+  border: 1px solid var(--r3d-border-2);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 10px;
+  color: var(--r3d-text-2);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* ── Furniture list ────────────────────────────────── */
+.r3d-flist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  flex: 1;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--r3d-border-2) transparent;
+}
+
+.r3d-frow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: var(--r3d-radius);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  color: var(--r3d-text);
+  font-family: inherit;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.r3d-frow:hover {
+  background: var(--r3d-surface-2);
+}
+
+.r3d-frow.active {
+  background: var(--r3d-accent-dim);
+  border-color: rgba(227, 181, 102, 0.2);
+}
+
+.r3d-ficon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r3d-radius);
+  background: #1e1a12;
+  border: 1px solid #2a2418;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--r3d-accent);
+  flex-shrink: 0;
+}
+
+.r3d-finfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.r3d-fname {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.r3d-fmeta {
+  font-size: 11px;
+  color: var(--r3d-text-2);
+  margin-top: 1px;
+}
+
+.r3d-fpos {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-size: 11px;
+  color: var(--r3d-text-2);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.r3d-fpos .dim {
+  font-size: 9px;
+  color: var(--r3d-text-3);
+}
+
+/* ── Inspector card ────────────────────────────────── */
+.r3d-inspector {
+  background: var(--r3d-surface-2);
+  border: 1px solid var(--r3d-border);
+  border-radius: var(--r3d-radius-lg);
+  padding: 12px 14px;
+}
+
+.r3d-inspector-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--r3d-text);
+}
+
+.r3d-inspector-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.r3d-ditem {
+  background: var(--r3d-surface);
+  border-radius: var(--r3d-radius);
+  padding: 7px 9px;
+}
+
+.r3d-ditem .lbl {
+  font-size: 10px;
+  color: var(--r3d-text-2);
+  margin-bottom: 2px;
+}
+
+.r3d-ditem .val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--r3d-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.r3d-glbpath {
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--r3d-text-3);
+  font-family: "Menlo", "Consolas", monospace;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* ── Empty state ───────────────────────────────────── */
+.r3d-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 36px 0;
+  color: var(--r3d-text-3);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── Error banner ──────────────────────────────────── */
+.r3d-error {
+  margin: 40px;
+  padding: 16px 20px;
+  background: rgba(228, 88, 78, 0.1);
+  border: 1px solid rgba(228, 88, 78, 0.3);
+  border-radius: var(--r3d-radius-lg);
+  color: var(--r3d-danger);
+  font-size: 14px;
+}
+
+/* ── Loading screen ────────────────────────────────── */
+.r3d-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 100vh;
+  gap: 16px;
+  color: var(--r3d-text-2);
+  font-size: 14px;
+}
+
+.r3d-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--r3d-border-2);
+  border-top-color: var(--r3d-accent);
+  border-radius: 50%;
+  animation: r3d-spin 0.75s linear infinite;
+}
+
+@keyframes r3d-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Scrollbars ────────────────────────────────────── */
+::-webkit-scrollbar               { width: 4px; height: 4px; }
+::-webkit-scrollbar-track         { background: transparent; }
+::-webkit-scrollbar-thumb         { background: var(--r3d-border-2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover   { background: #3a3a3a; }

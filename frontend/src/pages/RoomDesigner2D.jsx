@@ -4,122 +4,71 @@ import { HexColorPicker } from "react-colorful";
 import "./RoomDesigner2D.css";
 
 const API_BASE = "http://localhost:5000/api";
-const SCALE = 40;
-const WALL_MARGIN_M = 0.2;
+const SCALE = 40; // pixels per metre
 const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
 
-const getFurnitureDimsM = (catalogItem) => {
-  const width = (Number(catalogItem?.dimensions?.width) || 100) / 100;
-  const depth = (Number(catalogItem?.dimensions?.depth) || 100) / 100;
-
-  return { width, depth };
-};
+const getFurnitureDimsM = (catalogItem) => ({
+  width: (Number(catalogItem?.dimensions?.width) || 100) / 100,
+  depth: (Number(catalogItem?.dimensions?.depth) || 100) / 100,
+});
 
 const getFootprintM = (furnitureItem, catalogMap) => {
   const catalogItem = catalogMap.get(String(furnitureItem.furnitureId));
   const { width, depth } = getFurnitureDimsM(catalogItem);
-
   const rotation = ((Number(furnitureItem.rotation) || 0) % 180 + 180) % 180;
-
   const rotated = rotation === 90;
-
-  return {
-    width: rotated ? depth : width,
-    depth: rotated ? width : depth,
-  };
+  return { width: rotated ? depth : width, depth: rotated ? width : depth };
 };
 
 const isOverlapping = (candidate, others, catalogMap) => {
   const a = getFootprintM(candidate, catalogMap);
-
-  const aLeft = candidate.x - a.width / 2;
-  const aRight = candidate.x + a.width / 2;
-  const aTop = candidate.y - a.depth / 2;
-  const aBottom = candidate.y + a.depth / 2;
+  const aL = candidate.x - a.width / 2, aR = candidate.x + a.width / 2;
+  const aT = candidate.y - a.depth / 2, aB = candidate.y + a.depth / 2;
 
   return others.some((other) => {
     const b = getFootprintM(other, catalogMap);
-
-    const bLeft = other.x - b.width / 2;
-    const bRight = other.x + b.width / 2;
-    const bTop = other.y - b.depth / 2;
-    const bBottom = other.y + b.depth / 2;
-
-    const separated =
-      aRight <= bLeft ||
-      aLeft >= bRight ||
-      aBottom <= bTop ||
-      aTop >= bBottom;
-
-    return !separated;
+    const bL = other.x - b.width / 2, bR = other.x + b.width / 2;
+    const bT = other.y - b.depth / 2, bB = other.y + b.depth / 2;
+    return !(aR <= bL || aL >= bR || aB <= bT || aT >= bB);
   });
 };
 
 export default function RoomDesigner2D({ initialDesignId, ownerId }) {
   const [searchParams] = useSearchParams();
   const urlDesignId = searchParams.get("designId");
-
   const activeDesignId = initialDesignId || urlDesignId || null;
 
   const [designId, setDesignId] = useState(activeDesignId);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-
   const [furnitureCatalog, setFurnitureCatalog] = useState([]);
   const [design, setDesign] = useState({
     name: "Minimalist Loft Oasis",
     roomType: "Living Room",
     status: "draft",
     notes: "",
-    room: {
-      length: 12.5,
-      width: 8.4,
-      height: 3.2,
-      wallColor: "#2a1f1c",
-      floorColor: "#3b2316",
-    },
+    room: { length: 12.5, width: 8.4, height: 3.2, wallColor: "#2a1f1c", floorColor: "#3b2316" },
     furniture: [],
   });
-
   const [selectedIndex, setSelectedIndex] = useState(null);
+  const [activeColorPicker, setActiveColorPicker] = useState(null); // 'wall' | 'floor' | null
 
   const canvasRef = useRef(null);
-  const dragRef = useRef({
-    index: null,
-    offsetXM: 0,
-    offsetYM: 0,
-  });
+  const dragRef = useRef({ index: null, offsetXM: 0, offsetYM: 0 });
 
-  const selectedItem =
-    selectedIndex != null ? design.furniture[selectedIndex] : null;
-
+  const selectedItem = selectedIndex != null ? design.furniture[selectedIndex] : null;
   const catalogMap = useMemo(() => {
-  const map = new Map();
-  furnitureCatalog.forEach((item) => map.set(String(item._id), item));
-  return map;
-}, [furnitureCatalog]);
-
+    const map = new Map();
+    furnitureCatalog.forEach((item) => map.set(String(item._id), item));
+    return map;
+  }, [furnitureCatalog]);
 
   const roomLength = design.room.length || 1;
   const roomWidth = design.room.width || 1;
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-  const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
-
-  const updateDesign = (patch) =>
-    setDesign((prev) => ({
-      ...prev,
-      ...patch,
-    }));
-
-  const updateRoom = (patch) =>
-    setDesign((prev) => ({
-      ...prev,
-      room: { ...prev.room, ...patch },
-    }));
-
+  const updateDesign = (patch) => setDesign((prev) => ({ ...prev, ...patch }));
+  const updateRoom = (patch) => setDesign((prev) => ({ ...prev, room: { ...prev.room, ...patch } }));
   const updateFurnitureAt = (index, patch) =>
     setDesign((prev) => {
       const copy = [...prev.furniture];
@@ -129,31 +78,26 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
     });
 
   useEffect(() => {
-    const loadFurniture = async () => {
+    const load = async () => {
       try {
         const res = await fetch(`${API_BASE}/furniture`);
         const data = await res.json();
         setFurnitureCatalog(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Failed to load furniture", err);
-        setFurnitureCatalog([]);
       }
     };
-    loadFurniture();
+    load();
   }, []);
 
   useEffect(() => {
-    const loadDesign = async () => {
-      if (!activeDesignId) return;
+    if (!activeDesignId) return;
+    const load = async () => {
       setLoading(true);
       try {
         const res = await fetch(`${API_BASE}/designs/public/${activeDesignId}`);
-        if (!res.ok) {
-          throw new Error(`Failed to load design: ${res.status}`);
-        }
-
+        if (!res.ok) throw new Error(`Failed to load design: ${res.status}`);
         const data = await res.json();
-
         setDesign({
           name: data.name || "Untitled Design",
           roomType: data.roomType || "Living Room",
@@ -169,7 +113,6 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
           furniture: Array.isArray(data.furniture) ? data.furniture : [],
           ownerId: data.ownerId,
         });
-
         setDesignId(data._id);
         setSelectedIndex(null);
       } catch (err) {
@@ -178,122 +121,79 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
         setLoading(false);
       }
     };
-
-    loadDesign();
+    load();
   }, [activeDesignId]);
 
   const addFurnitureToRoom = (item) => {
-    const length = roomLength || 1;
-    const width = roomWidth || 1;
-
     const dims = getFurnitureDimsM(item);
-
     const newItem = {
       furnitureId: item._id,
       type: item.category,
-      x: length / 2,
-      y: width / 2,
+      x: clamp(roomLength / 2, dims.width / 2, roomLength - dims.width / 2),
+      y: clamp(roomWidth / 2, dims.depth / 2, roomWidth - dims.depth / 2),
       rotation: 0,
       scale: 1,
-      baseSize: 1.0,
     };
-
-    const halfW = dims.width / 2;
-    const halfD = dims.depth / 2;
-
-    newItem.x = clamp(newItem.x, WALL_MARGIN_M + halfW, length - WALL_MARGIN_M - halfW);
-    newItem.y = clamp(newItem.y, WALL_MARGIN_M + halfD, width - WALL_MARGIN_M - halfD);
-
-    const hasOverlap = isOverlapping(newItem, design.furniture, catalogMap);
-    if (hasOverlap) {
-      alert("Cannot place furniture here because it overlaps another item.");
+    if (isOverlapping(newItem, design.furniture, catalogMap)) {
+      alert("Cannot place furniture: overlaps another item.");
       return;
     }
-
-    setDesign((prev) => ({
-      ...prev,
-      furniture: [...prev.furniture, newItem],
-    }));
-
+    setDesign((prev) => ({ ...prev, furniture: [...prev.furniture, newItem] }));
     setSelectedIndex(design.furniture.length);
   };
-
 
   const beginDrag = (e, index) => {
     e.stopPropagation();
     if (!canvasRef.current) return;
-
     const rect = canvasRef.current.getBoundingClientRect();
     const item = design.furniture[index];
-
+    // item.x/y are in metres; canvas has a MARGIN_PX offset for the room rect
+    const MARGIN_PX = 32;
+    const itemXpx = item.x * SCALE + MARGIN_PX;
+    const itemYpx = item.y * SCALE + MARGIN_PX;
     const mouseXpx = e.clientX - rect.left;
     const mouseYpx = e.clientY - rect.top;
-
-    const itemXpx = item.x * SCALE;
-    const itemYpx = item.y * SCALE;
-
-    const offsetXM = (mouseXpx - itemXpx) / SCALE;
-    const offsetYM = (mouseYpx - itemYpx) / SCALE;
-
     dragRef.current = {
       index,
-      offsetXM,
-      offsetYM,
+      offsetXM: (mouseXpx - itemXpx) / SCALE,
+      offsetYM: (mouseYpx - itemYpx) / SCALE,
     };
-
     window.addEventListener("mousemove", onDrag);
     window.addEventListener("mouseup", endDrag);
   };
 
   const onDrag = (e) => {
-    if (dragRef.current.index == null || !canvasRef.current) return;
+    const { index, offsetXM, offsetYM } = dragRef.current;
+    if (index == null || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const mouseXpx = e.clientX - rect.left;
-    const mouseYpx = e.clientY - rect.top;
+    const MARGIN_PX = 32;
+    const mouseXpx = e.clientX - rect.left - MARGIN_PX;
+    const mouseYpx = e.clientY - rect.top - MARGIN_PX;
 
-    const mouseXM = mouseXpx / SCALE;
-    const mouseYM = mouseYpx / SCALE;
-
-    const { offsetXM, offsetYM, index } = dragRef.current;
-
-    const rawX = mouseXM - offsetXM;
-    const rawY = mouseYM - offsetYM;
+    const rawX = mouseXpx / SCALE - offsetXM;
+    const rawY = mouseYpx / SCALE - offsetYM;
 
     const item = design.furniture[index];
-    if (!item) return;
-
     const footprint = getFootprintM(item, catalogMap);
     const halfW = footprint.width / 2;
     const halfD = footprint.depth / 2;
 
-    const minX = WALL_MARGIN_M + halfW;
-    const maxX = roomLength - WALL_MARGIN_M - halfW;
-    const minY = WALL_MARGIN_M + halfD;
-    const maxY = roomWidth - WALL_MARGIN_M - halfD;
+    const newX = clamp(rawX, halfW, roomLength - halfW);
+    const newY = clamp(rawY, halfD, roomWidth - halfD);
 
-    const newXM = clamp(rawX, minX, maxX);
-    const newYM = clamp(rawY, minY, maxY);
-
-    const candidate = { ...item, x: newXM, y: newYM };
+    // Check overlap excluding self
+    const candidate = { ...item, x: newX, y: newY };
     const others = design.furniture.filter((_, i) => i !== index);
-
-    if (isOverlapping(candidate, others, catalogMap)) {
-      return;
-    }
+    if (isOverlapping(candidate, others, catalogMap)) return;
 
     setDesign((prev) => {
       const copy = [...prev.furniture];
       if (!copy[index]) return prev;
-      copy[index] = {
-        ...copy[index],
-        x: newXM,
-        y: newYM,
-      };
+      copy[index] = { ...copy[index], x: newX, y: newY };
       return { ...prev, furniture: copy };
     });
   };
-
 
   const endDrag = () => {
     dragRef.current = { index: null, offsetXM: 0, offsetYM: 0 };
@@ -314,462 +214,317 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const body = {
-        ...design,
-        ownerId: ownerId || design.ownerId,
-      };
-
-      const res = await fetch(
-        `${API_BASE}/designs${designId ? `/${designId}` : ""}`,
-        {
-          method: designId ? "PUT" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify(body),
-        }
-      );
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        console.error("Save error:", res.status, errData);
-        alert(`Failed to save design (${res.status}).`);
-        return;
-      }
-
+      const body = { ...design, ownerId: ownerId || design.ownerId };
+      const res = await fetch(`${API_BASE}/designs${designId ? `/${designId}` : ""}`, {
+        method: designId ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { alert(`Failed to save design (${res.status}).`); return; }
       const saved = await res.json();
       setDesignId(saved._id);
       alert("Design saved successfully.");
     } catch (err) {
-      console.error("Failed to save design", err);
       alert("Server error while saving design.");
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="container-fluid text-light p-4">Loading design...</div>
-    );
-  }
+  if (loading) return <div className="ew-loading">Loading design…</div>;
+
+  // Canvas pixel dimensions — room in pixels + margins
+  const MARGIN_PX = 32;
+  const canvasW = roomLength * SCALE + MARGIN_PX * 2;
+  const canvasH = roomWidth * SCALE + MARGIN_PX * 2;
 
   return (
-    <div className="container-fluid text-light p-0">
-      <div className="ew-topbar d-flex align-items-center justify-content-between px-4 py-2">
-        <div className="d-flex align-items-center gap-2">
-          <span className="material-icons-round text-warning">chair</span>
-          <span className="fw-semibold">Everwood &amp; Co.</span>
-          <span className="text-secondary small">/ Room Designer</span>
+    <div className="ew-root">
+      {/* ── Top bar ── */}
+      <header className="ew-topbar">
+        <div className="ew-topbar-brand">
+          <span className="ew-logo-mark">⬡</span>
+          <span className="ew-brand-name">Everwood</span>
+          <span className="ew-brand-sep">/</span>
+          <span className="ew-brand-sub">Room Designer</span>
         </div>
 
-        <div className="d-flex align-items-center gap-2">
-          
-              <Link
-                to={designId ? `/room-3d?designId=${designId}` : "#"}
-                className={`btn btn-sm btn-outline-warning ${!designId ? "disabled" : ""}`}
-                onClick={(e) => {
-                  if (!designId) {
-                    e.preventDefault();
-                    alert("Please save the design first.");
-                  }
-                }}
-              >
-                <span className="material-icons-round me-1" style={{ fontSize: 18 }}>
-                  view_in_ar
-                </span>
-                3D Room View
-              </Link>
-
-          <button className="btn btn-sm btn-outline-secondary text-light border-0">
-            Save as new
-          </button>
-
-          <button
-            className="btn btn-sm btn-ew-accent"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
+        <div className="ew-topbar-actions">
           <Link
-            to="/admin"
-            className="btn btn-sm btn-outline-secondary text-light border-0"
+            to={designId ? `/room-3d?designId=${designId}` : "#"}
+            className={`ew-btn ew-btn-outline ${!designId ? "ew-btn-disabled" : ""}`}
+            onClick={(e) => { if (!designId) { e.preventDefault(); alert("Please save the design first."); } }}
           >
-            <span className="material-icons-round me-1" style={{ fontSize: 18 }}>
-              dashboard
-            </span>
-            Back to dashboard
+            <span className="material-icons-round" style={{ fontSize: 16 }}>view_in_ar</span>
+            3D View
+          </Link>
+          <button className="ew-btn ew-btn-ghost" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save copy"}
+          </button>
+          <button className="ew-btn ew-btn-accent" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <Link to="/admin" className="ew-btn ew-btn-ghost">
+            <span className="material-icons-round" style={{ fontSize: 16 }}>dashboard</span>
+            Dashboard
           </Link>
         </div>
-      </div>
+      </header>
 
-      <div className="row g-3 p-3">
-        <div className="col-3">
-          <div className="ew-panel p-3 mb-3">
-            <div className="ew-section-title mb-2">Basic info</div>
-            <div className="mb-2">
-              <label className="form-label small text-uppercase text-secondary">
-                Design name
-              </label>
-              <input
-                type="text"
-                className="form-control form-control-sm bg-dark border-0 text-light"
-                value={design.name}
-                onChange={(e) => updateDesign({ name: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="form-label small text-uppercase text-secondary">
-                Room type
-              </label>
-              <select
-                className="form-select form-select-sm bg-dark border-0 text-light"
-                value={design.roomType}
-                onChange={(e) => updateDesign({ roomType: e.target.value })}
-              >
-                <option>Living Room</option>
-                <option>Bedroom</option>
-                <option>Dining</option>
-                <option>Office</option>
-              </select>
-            </div>
+      {/* ── Main layout ── */}
+      <div className="ew-layout">
+        {/* Left panel */}
+        <aside className="ew-sidebar">
+          <div className="ew-panel">
+            <div className="ew-panel-title">Design info</div>
+            <label className="ew-label">Name</label>
+            <input
+              className="ew-input"
+              value={design.name}
+              onChange={(e) => updateDesign({ name: e.target.value })}
+            />
+            <label className="ew-label" style={{ marginTop: 10 }}>Room type</label>
+            <select className="ew-input" value={design.roomType} onChange={(e) => updateDesign({ roomType: e.target.value })}>
+              <option>Living Room</option>
+              <option>Bedroom</option>
+              <option>Dining</option>
+              <option>Office</option>
+            </select>
           </div>
 
-          <div className="ew-panel p-3 mb-3">
-            <div className="ew-section-title mb-2">Dimensions (m)</div>
-            <div className="row g-2">
-              <div className="col-4">
-                <label className="form-label small text-secondary">Length</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="form-control form-control-sm bg-dark border-0 text-light"
-                  value={design.room.length}
-                  onChange={(e) =>
-                    updateRoom({ length: Number(e.target.value) || 0 })
-                  }
-                />
-              </div>
-              <div className="col-4">
-                <label className="form-label small text-secondary">Width</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="form-control form-control-sm bg-dark border-0 text-light"
-                  value={design.room.width}
-                  onChange={(e) =>
-                    updateRoom({ width: Number(e.target.value) || 0 })
-                  }
-                />
-              </div>
-              <div className="col-4">
-                <label className="form-label small text-secondary">Height</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="form-control form-control-sm bg-dark border-0 text-light"
-                  value={design.room.height}
-                  onChange={(e) =>
-                    updateRoom({ height: Number(e.target.value) || 0 })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="ew-panel p-3 mb-3">
-            <div className="ew-section-title mb-2">Colours</div>
-
-            <div className="mb-3">
-              <div className="small text-secondary mb-1">Wall</div>
-              <HexColorPicker
-                color={design.room.wallColor || "#2a1f1c"}
-                onChange={(color) => updateRoom({ wallColor: color })}
-              />
-              <div className="small mt-1 text-secondary">
-                {design.room.wallColor}
-              </div>
-            </div>
-
-            <div>
-              <div className="small text-secondary mb-1">Floor</div>
-              <HexColorPicker
-                color={design.room.floorColor || "#3b2316"}
-                onChange={(color) => updateRoom({ floorColor: color })}
-              />
-              <div className="small mt-1 text-secondary">
-                {design.room.floorColor}
-              </div>
-            </div>
-          </div>
-
-          <div className="ew-panel p-3">
-            <div className="d-flex justify-content-between mb-2 align-items-center">
-              <div className="ew-section-title mb-0">Catalogue</div>
-              <span
-                className="material-icons-round text-secondary"
-                style={{ fontSize: 18 }}
-              >
-                search
-              </span>
-            </div>
-
-            <div className="d-flex flex-column gap-2">
-              {furnitureCatalog.map((item) => (
-                <div
-                  key={item._id}
-                  className="ew-list-tile px-2 py-2 d-flex align-items-center justify-content-between"
-                  onClick={() => addFurnitureToRoom(item)}
-                >
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="material-icons-round text-warning">
-                      weekend
-                    </span>
-                    <div>
-                      <div className="small">{item.name}</div>
-                      <div
-                        className="text-secondary"
-                        style={{ fontSize: "0.7rem" }}
-                      >
-                        {item.category}
-                      </div>
-                    </div>
-                  </div>
-                  <span
-                    className="badge bg-dark border"
-                    style={{ borderColor: "var(--ew-border)" }}
-                  >
-                    {item.dimensions?.width}×{item.dimensions?.depth}
-                  </span>
+          <div className="ew-panel">
+            <div className="ew-panel-title">Dimensions (m)</div>
+            <div className="ew-dim-grid">
+              {[["Length", "length"], ["Width", "width"], ["Height", "height"]].map(([label, key]) => (
+                <div key={key}>
+                  <label className="ew-label">{label}</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    className="ew-input"
+                    value={design.room[key]}
+                    onChange={(e) => updateRoom({ [key]: Number(e.target.value) || 0 })}
+                  />
                 </div>
               ))}
+            </div>
+          </div>
 
+          <div className="ew-panel">
+            <div className="ew-panel-title">Colours</div>
+            {[["Wall", "wallColor", "wall"], ["Floor", "floorColor", "floor"]].map(([label, key, id]) => (
+              <div key={id} className="ew-color-row">
+                <div
+                  className="ew-color-swatch"
+                  style={{ background: design.room[key] }}
+                  onClick={() => setActiveColorPicker(activeColorPicker === id ? null : id)}
+                />
+                <div>
+                  <div className="ew-color-label">{label}</div>
+                  <div className="ew-color-hex">{design.room[key]}</div>
+                </div>
+                {activeColorPicker === id && (
+                  <div className="ew-color-popover">
+                    <HexColorPicker
+                      color={design.room[key]}
+                      onChange={(color) => updateRoom({ [key]: color })}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="ew-panel ew-panel-catalog">
+            <div className="ew-panel-title">
+              Catalogue
+              <span className="ew-catalog-count">{furnitureCatalog.length}</span>
+            </div>
+            <div className="ew-catalog-list">
+              {furnitureCatalog.map((item) => (
+                <button key={item._id} className="ew-catalog-item" onClick={() => addFurnitureToRoom(item)}>
+                  <span className="material-icons-round ew-catalog-icon">weekend</span>
+                  <div className="ew-catalog-info">
+                    <div className="ew-catalog-name">{item.name}</div>
+                    <div className="ew-catalog-meta">{item.category} · {item.dimensions?.width}×{item.dimensions?.depth}cm</div>
+                  </div>
+                  <span className="material-icons-round ew-catalog-add">add</span>
+                </button>
+              ))}
               {furnitureCatalog.length === 0 && (
-                <div className="text-secondary small">No furniture found.</div>
+                <div className="ew-empty-msg">No furniture found.</div>
               )}
             </div>
           </div>
-        </div>
+        </aside>
 
-        <div className="col-5">
-          <div className="d-flex justify-content-between mb-2">
-            <div className="ew-section-title">2D layout</div>
-            <div className="d-flex align-items-center gap-2">
-              <button className="btn btn-sm btn-outline-secondary border-0 text-secondary">
-                <span className="material-icons-round" style={{ fontSize: 18 }}>
-                  zoom_out
-                </span>
-              </button>
-              <button className="btn btn-sm btn-outline-secondary border-0 text-secondary">
-                <span className="material-icons-round" style={{ fontSize: 18 }}>
-                  zoom_in
-                </span>
-              </button>
-            </div>
+        {/* Canvas area */}
+        <main className="ew-canvas-area">
+          <div className="ew-canvas-toolbar">
+            <span className="ew-canvas-title">2D Layout</span>
+            <span className="ew-canvas-hint">{roomLength}m × {roomWidth}m</span>
           </div>
 
-          <div
-            ref={canvasRef}
-            className="ew-room-canvas"
-            onMouseDown={() => setSelectedIndex(null)}
-          >
-            <RoomRect
-              wallColor={design.room.wallColor}
-              floorColor={design.room.floorColor}
-              dims={design.room}
-            />
-
-            {design.furniture.map((item, index) => {
-              const leftPx = item.x * SCALE;
-              const topPx = item.y * SCALE;
-
-              return (
-                <div
-                  key={`${item.furnitureId}-${index}`}
-                  className={
-                    "ew-furniture-item" +
-                    (index === selectedIndex ? " selected" : "")
-                  }
-                  style={{
-                    left: leftPx,
-                    top: topPx,
-                    width: 70 * (item.scale || 1),
-                    height: 70 * (item.scale || 1),
-                    transform: `translate(-50%, -50%) rotate(${item.rotation || 0}deg)`,
-                  }}
-                  onMouseDown={(e) => beginDrag(e, index)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedIndex(index);
-                  }}
-                >
-                  <span className="material-icons-round" style={{ fontSize: 28 }}>
-                    weekend
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="col-4">
-          <div className="ew-panel p-3 mb-3">
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <div className="ew-section-title">Live 3D view</div>
-              <div className="small text-secondary">Coming soon</div>
-            </div>
+          <div className="ew-canvas-scroll">
             <div
-              className="rounded-3"
-              style={{
-                background: "#111",
-                border: "1px solid var(--ew-border)",
-                height: 180,
-              }}
-            />
-          </div>
+              ref={canvasRef}
+              className="ew-room-canvas"
+              style={{ width: canvasW, height: canvasH }}
+              onMouseDown={() => setSelectedIndex(null)}
+            >
+              {/* Room rectangle */}
+              <div
+                className="ew-room-rect"
+                style={{
+                  left: MARGIN_PX,
+                  top: MARGIN_PX,
+                  width: roomLength * SCALE,
+                  height: roomWidth * SCALE,
+                  background: `linear-gradient(160deg, ${design.room.wallColor} 0 28%, ${design.room.floorColor} 28% 100%)`,
+                }}
+              />
 
-          <div className="ew-panel p-3">
-            <div className="ew-section-title mb-2">Object inspector</div>
+              {/* Furniture pieces */}
+              {design.furniture.map((item, index) => {
+                const catalogItem = catalogMap.get(String(item.furnitureId));
+                const dims = getFurnitureDimsM(catalogItem);
+                const wPx = dims.width * SCALE;
+                const dPx = dims.depth * SCALE;
+                // item.x/y in metres from room origin (0→length, 0→width)
+                const leftPx = item.x * SCALE + MARGIN_PX;
+                const topPx = item.y * SCALE + MARGIN_PX;
+                const isSelected = index === selectedIndex;
+
+                return (
+                  <div
+                    key={`${item.furnitureId}-${index}`}
+                    className={`ew-furniture-item${isSelected ? " selected" : ""}`}
+                    style={{
+                      left: leftPx,
+                      top: topPx,
+                      width: wPx,
+                      height: dPx,
+                      transform: `translate(-50%, -50%) rotate(${item.rotation || 0}deg)`,
+                    }}
+                    onMouseDown={(e) => beginDrag(e, index)}
+                    onClick={(e) => { e.stopPropagation(); setSelectedIndex(index); }}
+                  >
+                    <span className="material-icons-round" style={{ fontSize: Math.min(wPx, dPx) * 0.45 }}>
+                      weekend
+                    </span>
+                    {isSelected && (
+                      <div className="ew-furniture-label">
+                        {catalogItem?.name || item.type}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </main>
+
+        {/* Right inspector panel */}
+        <aside className="ew-inspector">
+          <div className="ew-panel" style={{ flex: 1 }}>
+            <div className="ew-panel-title">Object inspector</div>
+
             {selectedItem ? (
-              <>
-                <div className="d-flex align-items-center justify-content-between mb-2">
+              <div className="ew-inspector-content">
+                {/* Item header */}
+                <div className="ew-inspector-header">
+                  <div className="ew-inspector-icon">
+                    <span className="material-icons-round" style={{ fontSize: 18, color: "#e3b566" }}>weekend</span>
+                  </div>
                   <div>
-                    <div className="small fw-semibold">
-                      {
-                        furnitureCatalog.find(
-                          (f) => f._id === selectedItem.furnitureId
-                        )?.name
-                      }
+                    <div className="ew-inspector-name">
+                      {furnitureCatalog.find((f) => f._id === selectedItem.furnitureId)?.name || selectedItem.type}
                     </div>
-                    <div
-                      className="text-secondary"
-                      style={{ fontSize: "0.7rem" }}
-                    >
-                      {selectedItem.type}
-                    </div>
+                    <div className="ew-inspector-type">{selectedItem.type}</div>
                   </div>
                   <button
-                    className="btn btn-sm btn-outline-secondary border-0 text-secondary"
+                    className="ew-btn-icon"
+                    title="Rotate 90°"
                     onClick={() => {
-                      const newRotation = ((selectedItem.rotation || 0) + 90) % 180;
-                      const candidate = { ...selectedItem, rotation: newRotation };
+                      const newRot = ((selectedItem.rotation || 0) + 90) % 360;
+                      const candidate = { ...selectedItem, rotation: newRot };
                       const others = design.furniture.filter((_, i) => i !== selectedIndex);
-
                       if (isOverlapping(candidate, others, catalogMap)) {
-                        alert("Cannot rotate here because it would overlap another item.");
+                        alert("Cannot rotate: would overlap another item.");
                         return;
                       }
-
-                      updateFurnitureAt(selectedIndex, { rotation: newRotation });
+                      updateFurnitureAt(selectedIndex, { rotation: newRot });
                     }}
                   >
-                    <span className="material-icons-round" style={{ fontSize: 18 }}>
-                      rotate_right
-                    </span>
+                    <span className="material-icons-round" style={{ fontSize: 18 }}>rotate_right</span>
                   </button>
                 </div>
 
-                <div className="row g-2 mb-2">
-                  <div className="col-6">
-                    <label className="form-label small text-secondary">
-                      Pos X (m)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      className="form-control form-control-sm bg-dark border-0 text-light"
-                      value={Number(selectedItem.x.toFixed(2))}
-                      onChange={(e) =>
-                        updateFurnitureAt(selectedIndex, {
-                          x: Number(e.target.value) || 0,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="col-6">
-                    <label className="form-label small text-secondary">
-                      Pos Y (m)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      className="form-control form-control-sm bg-dark border-0 text-light"
-                      value={Number(selectedItem.y.toFixed(2))}
-                      onChange={(e) =>
-                        updateFurnitureAt(selectedIndex, {
-                          y: Number(e.target.value) || 0,
-                        })
-                      }
-                    />
-                  </div>
+                {/* Position */}
+                <div className="ew-inspector-section-label">Position (m)</div>
+                <div className="ew-input-row">
+                  {[["X", "x"], ["Y", "y"]].map(([label, key]) => (
+                    <div key={key} className="ew-input-group">
+                      <label className="ew-input-prefix">{label}</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        className="ew-input ew-input-inline"
+                        value={Number(selectedItem[key].toFixed(2))}
+                        onChange={(e) => updateFurnitureAt(selectedIndex, { [key]: Number(e.target.value) || 0 })}
+                      />
+                    </div>
+                  ))}
                 </div>
 
-                <div className="row g-2 mb-3">
-                  <div className="col-6">
-                    <label className="form-label small text-secondary">
-                      Rotation
-                    </label>
-                    <input
-                      type="number"
-                      className="form-control form-control-sm bg-dark border-0 text-light"
-                      value={selectedItem.rotation || 0}
-                      onChange={(e) =>
-                        updateFurnitureAt(selectedIndex, {
-                          rotation: Number(e.target.value) || 0,
-                        })
-                      }
-                    />
-                  </div>
-                  
-                </div>
+                {/* Rotation */}
+                <div className="ew-inspector-section-label">Rotation</div>
+                <input
+                  type="number"
+                  className="ew-input"
+                  value={selectedItem.rotation || 0}
+                  onChange={(e) => updateFurnitureAt(selectedIndex, { rotation: Number(e.target.value) || 0 })}
+                />
 
-                <button
-                  className="btn btn-sm w-100 btn-ew-danger text-light"
-                  onClick={deleteSelected}
-                >
-                  <span
-                    className="material-icons-round me-1"
-                    style={{ fontSize: 18 }}
-                  >
-                    delete
-                  </span>
+                <div style={{ flex: 1 }} />
+
+                <button className="ew-btn ew-btn-danger" style={{ width: "100%", marginTop: 16 }} onClick={deleteSelected}>
+                  <span className="material-icons-round" style={{ fontSize: 16 }}>delete</span>
                   Delete object
                 </button>
-              </>
+              </div>
             ) : (
-              <div className="text-secondary small">
-                Select a furniture item on the canvas to edit its properties.
+              <div className="ew-inspector-empty">
+                <span className="material-icons-round" style={{ fontSize: 32, color: "#2a2a2a" }}>
+                  touch_app
+                </span>
+                <div>Select a furniture item to edit its properties</div>
               </div>
             )}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function RoomRect({ wallColor, floorColor, dims }) {
-  const margin = 40;
-  const length = dims.length || 1;
-  const width = dims.width || 1;
-
-  return (
-    <div
-      className="ew-room-rect"
-      style={{
-        left: margin,
-        top: margin,
-        right: margin,
-        bottom: margin,
-        background: `linear-gradient(to bottom, ${
-          wallColor || "#2a1f1c"
-        } 0 30%, ${floorColor || "#3b2316"} 30% 100%)`,
-      }}
-    >
-      <div className="position-absolute top-0 start-0 p-2 small text-secondary">
-        {length}m × {width}m
+          {/* Stats summary */}
+          <div className="ew-panel ew-stats-panel">
+            <div className="ew-panel-title">Room summary</div>
+            <div className="ew-stats-grid">
+              <div className="ew-stat">
+                <div className="ew-stat-val">{design.furniture.length}</div>
+                <div className="ew-stat-lbl">Items</div>
+              </div>
+              <div className="ew-stat">
+                <div className="ew-stat-val">{(roomLength * roomWidth).toFixed(1)}</div>
+                <div className="ew-stat-lbl">Area m²</div>
+              </div>
+              <div className="ew-stat">
+                <div className="ew-stat-val">{design.room.height}m</div>
+                <div className="ew-stat-lbl">Height</div>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
