@@ -73,7 +73,15 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
     setDesign((prev) => {
       const copy = [...prev.furniture];
       if (!copy[index]) return prev;
-      copy[index] = { ...copy[index], ...patch };
+      const updated = { ...copy[index], ...patch };
+      // Always re-clamp position after any update to prevent going out of bounds
+      const ci = catalogMap.get(String(updated.furnitureId));
+      const fp = getFootprintM(updated, catalogMap);
+      if (typeof updated.x === "number")
+        updated.x = clamp(updated.x, fp.width / 2, (prev.room?.length || roomLength) - fp.width / 2);
+      if (typeof updated.y === "number")
+        updated.y = clamp(updated.y, fp.depth / 2, (prev.room?.width  || roomWidth)  - fp.depth / 2);
+      copy[index] = updated;
       return { ...prev, furniture: copy };
     });
 
@@ -450,13 +458,23 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                     title="Rotate 90°"
                     onClick={() => {
                       const newRot = ((selectedItem.rotation || 0) + 90) % 360;
-                      const candidate = { ...selectedItem, rotation: newRot };
+
+                      // Footprint swaps at 90°/270° — re-clamp so piece stays inside room
+                      const ci = catalogMap.get(String(selectedItem.furnitureId));
+                      const { width: rawW, depth: rawD } = getFurnitureDimsM(ci);
+                      const swapped = ((newRot % 180) + 180) % 180 === 90;
+                      const footW = swapped ? rawD : rawW;
+                      const footD = swapped ? rawW : rawD;
+                      const clampedX = clamp(selectedItem.x, footW / 2, roomLength - footW / 2);
+                      const clampedY = clamp(selectedItem.y, footD / 2, roomWidth  - footD / 2);
+
+                      const candidate = { ...selectedItem, rotation: newRot, x: clampedX, y: clampedY };
                       const others = design.furniture.filter((_, i) => i !== selectedIndex);
                       if (isOverlapping(candidate, others, catalogMap)) {
                         alert("Cannot rotate: would overlap another item.");
                         return;
                       }
-                      updateFurnitureAt(selectedIndex, { rotation: newRot });
+                      updateFurnitureAt(selectedIndex, { rotation: newRot, x: clampedX, y: clampedY });
                     }}
                   >
                     <span className="material-icons-round" style={{ fontSize: 18 }}>rotate_right</span>
@@ -486,7 +504,17 @@ export default function RoomDesigner2D({ initialDesignId, ownerId }) {
                   type="number"
                   className="ew-input"
                   value={selectedItem.rotation || 0}
-                  onChange={(e) => updateFurnitureAt(selectedIndex, { rotation: Number(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const newRot = Number(e.target.value) || 0;
+                    const ci = catalogMap.get(String(selectedItem.furnitureId));
+                    const { width: rawW, depth: rawD } = getFurnitureDimsM(ci);
+                    const swapped = ((newRot % 180) + 180) % 180 === 90;
+                    const footW = swapped ? rawD : rawW;
+                    const footD = swapped ? rawW : rawD;
+                    const clampedX = clamp(selectedItem.x, footW / 2, roomLength - footW / 2);
+                    const clampedY = clamp(selectedItem.y, footD / 2, roomWidth  - footD / 2);
+                    updateFurnitureAt(selectedIndex, { rotation: newRot, x: clampedX, y: clampedY });
+                  }}
                 />
 
                 <div style={{ flex: 1 }} />
