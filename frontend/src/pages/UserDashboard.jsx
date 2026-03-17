@@ -140,14 +140,14 @@ export default function UserDashboard() {
         </div>
 
         {/* ── STATS ──────────────────────────────────── */}
-        <div className="row g-3 mb-4">
+        <div className="row g-3 mb-4 align-items-stretch">
           {[
             { icon: "folder_open",  label: "Total Designs",   val: designs.length,                                cls: "",      sub: "all projects" },
             { icon: "history",      label: "Recently Opened",  val: designs[0]?.name || "—",                      cls: "blue",  sub: "last modified", small: true },
             { icon: "edit_note",    label: "Draft Designs",    val: designs.filter(d => d.status === "draft").length, cls: "green", sub: "in progress" },
           ].map(({ icon, label, val, cls, sub, small }) => (
             <div key={label} className="col-12 col-md-4">
-              <div className={`ud-stat p-4 d-flex align-items-center gap-3 ${cls}`}>
+              <div className={`ud-stat p-4 d-flex align-items-center gap-3 h-100 ${cls}`}>
                 <div className="ud-stat-icon">
                   <span className="material-icons-round">{icon}</span>
                 </div>

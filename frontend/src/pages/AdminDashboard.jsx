@@ -99,7 +99,7 @@ function Sidebar() {
 function Topbar({ search, onSearch }) {
   return (
     <header className="topbar">
-      <span className="topbar-title">Design Library</span>
+      <span className="topbar-title">Administration Panel</span>
       <div className="d-flex align-items-center gap-2">
         <div className="search">
           <span className="material-icons-round">search</span>
