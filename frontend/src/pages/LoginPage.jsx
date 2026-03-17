@@ -32,6 +32,7 @@ const LoginPage = () => {
         // 1. Save data to storage
         localStorage.setItem("token", res.data.token);
         localStorage.setItem("user", JSON.stringify(res.data.user));
+        localStorage.setItem("role", res.data.user?.role || "user");
 
         // 2. Logic for Role-Based Navigation
         const userRole = res.data.user?.role; // Assuming backend returns { user: { role: 'admin', ... } }
@@ -155,7 +156,7 @@ const LoginPage = () => {
           {/* Register link */}
           <div className="login-register">
             <p>
-              New to the circle?
+              New to the Everwood ? 
               <Link to="/register" className="login-register-link">
                 Create an Account
               </Link>
@@ -166,7 +167,7 @@ const LoginPage = () => {
 
       {/* Footer */}
       <footer className="login-footer">
-        <p>© 2026 Everwood &amp; Company. All Rights Reserved.</p>
+        <p>© 2026 Everwood &amp; PUSL3122 HCI, Group 04</p>
       </footer>
     </div>
   );

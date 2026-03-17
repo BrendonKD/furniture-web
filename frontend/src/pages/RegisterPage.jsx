@@ -111,10 +111,6 @@ const RegisterPage = () => {
             <form className="register-form" onSubmit={handleSubmit}>
               {/* Personal details */}
               <section className="register-section">
-                <div className="register-section-title">
-                  <span className="material-icons-round">person</span>
-                  <span>Personal Details</span>
-                </div>
                 <div className="register-grid-two">
                   <div className="register-field">
                     <label htmlFor="firstName">First Name</label>
@@ -168,10 +164,6 @@ const RegisterPage = () => {
 
               {/* Security */}
               <section className="register-section">
-                <div className="register-section-title">
-                  <span className="material-icons-round">shield</span>
-                  <span>Security</span>
-                </div>
                 <div className="register-grid-two">
                   <div className="register-field">
                     <label htmlFor="password">Password</label>

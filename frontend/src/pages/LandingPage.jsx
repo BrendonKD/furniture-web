@@ -259,23 +259,9 @@ const LandingPage = () => {
       {/* FOOTER */}
       <footer id="footer" className="landing-footer py-4">
         <div className="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
-          <div>
-            <div className="d-flex align-items-center mb-1">
-              <div className="brand-icon me-2 d-flex align-items-center justify-content-center">
-                <span className="material-icons-round">weekend</span>
-              </div>
-              <span className="fw-semibold">Everwood &amp; Co.</span>
-            </div>
-            <small className="text-main">
-              Course project for PUSL3122 – HCI, Computer Graphics &amp;
-              Visualisation.
-            </small>
-          </div>
-
           <div className="text-md-end">
             <small className="d-block text-main">
-              © {new Date().getFullYear()} Everwood &amp; Co. All rights
-              reserved.
+              © {new Date().getFullYear()} Everwood &amp;  PUSL3122 HCI, Group 04
             </small>
           </div>
         </div>

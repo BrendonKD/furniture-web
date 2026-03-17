@@ -8,8 +8,6 @@ import "./AddFurniture.css";
 
 /* ─────────────────────────────────────────────────────
    Measure a GLB scene → return dimensions in cm.
-   Uses strip-all-transforms technique so baked authoring
-   offsets don't affect the measurement.
 ───────────────────────────────────────────────────── */
 function measureScene(scene) {
   const tmp = scene.clone(true);
@@ -188,7 +186,7 @@ export default function AddFurniture() {
                   </select>
                 </div>
                 <div className="af-field">
-                  <label>Price (USD) <span className="af-req">*</span></label>
+                  <label>Price (LKR) <span className="af-req">*</span></label>
                   <input type="number" step="0.01" min="0" placeholder="299.99"
                     value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} required />
                 </div>

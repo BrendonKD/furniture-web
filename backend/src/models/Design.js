@@ -12,6 +12,7 @@ const furnitureItemSchema = new mongoose.Schema({
 const designSchema = new mongoose.Schema({
   name: { type: String, required: true },
   roomType: String,
+  roomShape: { type: String, default: "Rectangle" },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   status: { type: String, default: "draft" },
   notes: String,

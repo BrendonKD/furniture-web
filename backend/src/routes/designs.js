@@ -7,19 +7,16 @@ const router = express.Router();
 // ─── PUBLIC ADMIN: GET ALL DESIGNS (no auth) ────────────────────────────────
 router.get("/admin", async (req, res) => {
   try {
-    const designs = await Design.find().sort({ updatedAt: -1 }).limit(20);
+    const designs = await Design.find()
+    .sort({ updatedAt: -1 })
+    .limit(20)
+    .populate("ownerId", "name email");
     res.json(designs);
   } catch (err) {
     console.error("Admin designs error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
-
-// Your existing auth routes stay the same...
-router.get("/", requireAuth, async (req, res) => {
-  // ...
-});
-
 
 router.get("/public/:id", async (req, res) => {
   try {
@@ -30,10 +27,31 @@ router.get("/public/:id", async (req, res) => {
       _id: design._id,
       name: design.name,
       roomType: design.roomType,
+      roomShape: design.roomShape || "Rectangle",
       room: design.room,
       furniture: design.furniture,
       updatedAt: design.updatedAt,
     });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Update status only
+router.patch("/:id/status", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ["draft", "inprogress", "complete", "pending"];
+    if (!allowed.includes(status))
+      return res.status(400).json({ message: "Invalid status" });
+
+    const design = await Design.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
+    if (!design) return res.status(404).json({ message: "Not found" });
+    res.json(design);
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }

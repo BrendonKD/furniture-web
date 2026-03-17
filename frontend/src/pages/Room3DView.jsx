@@ -8,9 +8,78 @@ import "./Room3DView.css";
 const API_BASE       = "http://localhost:5000/api";
 const BACKEND_ORIGIN = "http://localhost:5000";
 
-/* ═══════════════════════════════════════════════════════
-   Page — data fetching + UI
-═══════════════════════════════════════════════════════ */
+function buildFloorMeshes(shape, L, W, mat) {
+  if (shape === "L Room") {
+    // L-shape = two rectangles:
+    //   Left column:  full width (W), half length (L/2)   → x: 0 → L/2
+    //   Right column: half width (W/2), half length (L/2) → x: L/2 → L, z: 0 → W/2
+    const meshes = [];
+
+    const f1 = new THREE.Mesh(new THREE.PlaneGeometry(L / 2, W), mat);
+    f1.rotation.x = -Math.PI / 2;
+    f1.position.set(L / 4, 0, W / 2);
+    f1.receiveShadow = true;
+    meshes.push(f1);
+
+    const f2 = new THREE.Mesh(new THREE.PlaneGeometry(L / 2, W / 2), mat);
+    f2.rotation.x = -Math.PI / 2;
+    f2.position.set((L / 2) + (L / 4), 0, W / 4);
+    f2.receiveShadow = true;
+    meshes.push(f2);
+
+    return meshes;
+  }
+
+  // Default rectangle
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(L, W), mat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(L / 2, 0, W / 2);
+  floor.receiveShadow = true;
+  return [floor];
+}
+
+function buildWallMeshes(shape, L, W, H, mat) {
+  const T      = 0.08;
+  const meshes = [];
+
+  const addWall = (geo, px, py, pz) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(px, py, pz);
+    m.castShadow = m.receiveShadow = true;
+    meshes.push(m);
+  };
+
+  if (shape === "L Room") {
+    // Back wall (z = 0) — full length
+    addWall(new THREE.BoxGeometry(L, H, T), L / 2, H / 2, 0);
+
+    // Left wall (x = 0) — full width, no front wall so stops at W
+    addWall(new THREE.BoxGeometry(T, H, W), 0, H / 2, W / 2);
+
+    // Right wall (x = L) — only covers z: 0 → W/2 (the short arm of L)
+    addWall(new THREE.BoxGeometry(T, H, W / 2), L, H / 2, W / 4);
+
+    // Inner horizontal step (z = W/2, x: L/2 → L)
+    // This is an interior wall — make it half-height so you can see over it
+    addWall(new THREE.BoxGeometry(L / 2, H * 0.6, T), L * 0.75, H * 0.3, W / 2);
+
+    // Inner vertical step (x = L/2, z: W/2 → W)
+    // Also half-height
+    addWall(new THREE.BoxGeometry(T, H * 0.6, W / 2), L / 2, H * 0.3, W * 0.75);
+
+  } else {
+    // Rectangle — back + left + right only, no front wall
+    addWall(new THREE.BoxGeometry(L + T * 2, H, T), L / 2, H / 2, 0);
+    addWall(new THREE.BoxGeometry(T, H, W),          0,     H / 2, W / 2);
+    addWall(new THREE.BoxGeometry(T, H, W),          L,     H / 2, W / 2);
+  }
+
+  return meshes;
+}
+
+/* ═══════════════════════════════════════════════
+   PAGE COMPONENT
+═══════════════════════════════════════════════ */
 export default function Room3DView() {
   const [searchParams] = useSearchParams();
   const designId = searchParams.get("designId");
@@ -54,6 +123,7 @@ export default function Room3DView() {
     height:     Number(design?.room?.height)     || 3,
     wallColor:  design?.room?.wallColor          || "#c8b8a2",
     floorColor: design?.room?.floorColor         || "#8d6e63",
+    shape:      design?.roomShape                || "Rectangle",
   }), [design]);
 
   const items = useMemo(
@@ -61,6 +131,7 @@ export default function Room3DView() {
     [design]
   );
 
+  /* ── Loading / error states ── */
   if (loading) return (
     <div className="r3d-shell">
       <div className="r3d-loading">
@@ -74,8 +145,8 @@ export default function Room3DView() {
     <div className="r3d-shell">
       <header className="r3d-header">
         <div className="r3d-header-left">
-          <span className="r3d-logo">⬡</span>
-          <span className="r3d-title">3D Room View</span>
+        <span   className="material-icons-round"  style={{ color: '#c9922a' }}>  chair</span>
+        <span className="r3d-title">3D Room View</span>
         </div>
         <Link to="/admin/create-session" className="r3d-btn r3d-btn-outline">← Back</Link>
       </header>
@@ -83,25 +154,33 @@ export default function Room3DView() {
     </div>
   );
 
+  const role          = localStorage.getItem("role");
+  const dashboardLink = role === "admin" ? "/admin" : "/dashboard";
+  const designerLink  = role === "admin"
+    ? `/admin/create-session?designId=${design._id}`
+    : `/room-designer?designId=${design._id}`;
+
   return (
     <div className="r3d-shell">
 
       <header className="r3d-header">
         <div className="r3d-header-left">
-          <span className="r3d-logo">⬡</span>
+                  <span   className="material-icons-round"  style={{ color: '#c9922a' }}>  chair</span>
           <div>
             <div className="r3d-title">{design.name || "Untitled Design"}</div>
             <div className="r3d-subtitle">
-              {design.roomType || "Room"}&ensp;·&ensp;
+              {design.roomType || "Room"}
+              {room.shape !== "Rectangle" ? ` · ${room.shape}` : ""}
+              &ensp;·&ensp;
               {room.length}m × {room.width}m × {room.height}m
             </div>
           </div>
         </div>
         <div className="r3d-header-right">
-          <Link to={`/admin/create-session?designId=${design._id}`} className="r3d-btn r3d-btn-outline">
+          <Link to={designerLink} className="r3d-btn r3d-btn-outline">
             ← 2D Designer
           </Link>
-          <Link to="/admin" className="r3d-btn r3d-btn-accent">
+          <Link to={dashboardLink} className="r3d-btn r3d-btn-accent">
             Dashboard
           </Link>
         </div>
@@ -111,7 +190,7 @@ export default function Room3DView() {
 
         <div className="r3d-canvas-wrap">
           <ThreeCanvas room={room} items={items} furnitureMap={furnitureMap} />
-          <div className="r3d-canvas-badge">3D VIEW</div>
+          <div className="r3d-canvas-badge">3D VIEW · {room.shape}</div>
           <div className="r3d-canvas-hint">Drag to orbit · Scroll to zoom · Right-click to pan</div>
         </div>
 
@@ -126,8 +205,12 @@ export default function Room3DView() {
               <StatCard label="Items"  value={items.length} accent />
             </div>
             <div className="r3d-chips">
-              <ColorChip color={room.wallColor}  label="Wall" />
+              <ColorChip color={room.wallColor}  label="Wall"  />
               <ColorChip color={room.floorColor} label="Floor" />
+              <span className="r3d-chip">
+                <span style={{ fontSize: 11 }}>⬡</span>
+                {room.shape}
+              </span>
             </div>
           </section>
 
@@ -197,20 +280,9 @@ export default function Room3DView() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════
-   ThreeCanvas — vanilla Three.js (no R3F/drei)
-
-   Uses the exact same proven technique from Room3DCanvas:
-     1. Load GLB with GLTFLoader
-     2. Scale model to fit DB dimensions
-     3. Measure bbox AFTER scaling
-     4. model.position.y = -scaledBbox.min.y  ← floor snap
-     5. model.position.x/z centred on item.x/y
-
-   This is version-independent and always works because
-   requestAnimationFrame guarantees matrices are computed
-   before we measure them.
-═══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════
+   THREE.JS CANVAS
+═══════════════════════════════════════════════ */
 function ThreeCanvas({ room, items, furnitureMap }) {
   const mountRef = useRef(null);
 
@@ -222,7 +294,7 @@ function ThreeCanvas({ room, items, furnitureMap }) {
     const W = room.width;
     const H = room.height;
 
-    /* ── Scene setup ── */
+    /* ── Scene ── */
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#0b0d10");
     scene.fog = new THREE.Fog("#0b0d10", L * 4, L * 12);
@@ -231,10 +303,7 @@ function ThreeCanvas({ room, items, furnitureMap }) {
     const H_px = el.clientHeight || 600;
 
     /* ── Renderer ── */
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(W_px, H_px);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
@@ -249,12 +318,12 @@ function ThreeCanvas({ room, items, furnitureMap }) {
 
     /* ── Controls ── */
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping  = true;
-    controls.dampingFactor  = 0.07;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
     controls.target.set(L / 2, H * 0.25, W / 2);
-    controls.minDistance    = 2;
-    controls.maxDistance    = 80;
-    controls.maxPolarAngle  = Math.PI / 2.05;
+    controls.minDistance   = 2;
+    controls.maxDistance   = 80;
+    controls.maxPolarAngle = Math.PI / 2.05;
 
     /* ── Lights ── */
     scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -275,37 +344,17 @@ function ThreeCanvas({ room, items, furnitureMap }) {
     fill.position.set(L / 2, H * 0.8, W / 2);
     scene.add(fill);
 
-    /* ── Room geometry ── */
-    const T = 0.1;
+    /* ── Materials ── */
     const wallMat  = new THREE.MeshStandardMaterial({ color: room.wallColor,  roughness: 0.85 });
     const floorMat = new THREE.MeshStandardMaterial({ color: room.floorColor, roughness: 0.88, metalness: 0.04 });
 
-    // Floor
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(L, W), floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set(L / 2, 0, W / 2);
-    floor.receiveShadow = true;
-    scene.add(floor);
+    /* ── Floor meshes (shape-aware) ── */
+    buildFloorMeshes(room.shape, L, W, floorMat).forEach(m => scene.add(m));
 
-    // Back wall z=0
-    const bw = new THREE.Mesh(new THREE.BoxGeometry(L + T * 2, H, T), wallMat);
-    bw.position.set(L / 2, H / 2, 0);
-    bw.castShadow = bw.receiveShadow = true;
-    scene.add(bw);
+    /* ── Wall meshes (shape-aware) ── */
+    buildWallMeshes(room.shape, L, W, H, wallMat).forEach(m => scene.add(m));
 
-    // Left wall x=0
-    const lw = new THREE.Mesh(new THREE.BoxGeometry(T, H, W), wallMat);
-    lw.position.set(0, H / 2, W / 2);
-    lw.castShadow = lw.receiveShadow = true;
-    scene.add(lw);
-
-    // Right wall x=L
-    const rw = new THREE.Mesh(new THREE.BoxGeometry(T, H, W), wallMat);
-    rw.position.set(L, H / 2, W / 2);
-    rw.castShadow = rw.receiveShadow = true;
-    scene.add(rw);
-
-    // Grid
+    /* ── Grid ── */
     const grid = new THREE.GridHelper(Math.max(L, W) * 2.5, Math.max(L, W) * 2.5, "#222", "#1a1a1a");
     grid.position.set(L / 2, 0.002, W / 2);
     scene.add(grid);
@@ -315,19 +364,15 @@ function ThreeCanvas({ room, items, furnitureMap }) {
 
     const loadFurniture = async () => {
       for (const item of items) {
-        const ci  = furnitureMap.get(String(item.furnitureId));
-        const url = ci?.glbPath ? resolveGlbPath(ci.glbPath) : null;
-
-        /* Target real-world size in metres from DB (stored as cm) */
-        const dbW_m = (Number(ci?.dimensions?.width)  || 100) / 100;
-        const dbH_m = (Number(ci?.dimensions?.height) || 90)  / 100;
-        const dbD_m = (Number(ci?.dimensions?.depth)  || 100) / 100;
+        const ci      = furnitureMap.get(String(item.furnitureId));
+        const url     = ci?.glbPath ? resolveGlbPath(ci.glbPath) : null;
+        const dbW_m   = (Number(ci?.dimensions?.width)  || 100) / 100;
+        const dbH_m   = (Number(ci?.dimensions?.height) || 90)  / 100;
+        const dbD_m   = (Number(ci?.dimensions?.depth)  || 100) / 100;
         const userScale = Number(item.scale) || 1;
-
-        /* X/Z world position from design data */
-        const posX = Number(item.x) || 0;
-        const posZ = Number(item.y) || 0;
-        const rotY = THREE.MathUtils.degToRad(Number(item.rotation) || 0);
+        const posX    = Number(item.x) || 0;
+        const posZ    = Number(item.y) || 0;
+        const rotY    = THREE.MathUtils.degToRad(Number(item.rotation) || 0);
 
         if (!url) {
           addFallbackBox(scene, posX, posZ, rotY, dbW_m, dbH_m, dbD_m, userScale, ci);
@@ -338,30 +383,14 @@ function ThreeCanvas({ room, items, furnitureMap }) {
           const gltf  = await loadGLTF(loader, url);
           const model = gltf.scene;
 
-          /* Shadows */
           model.traverse(child => {
             if (child.isMesh) child.castShadow = child.receiveShadow = true;
           });
 
-          /*
-           * Placement algorithm (same as friend's working Room3DCanvas):
-           *
-           * 1. Add model to a temporary pivot group so Three.js computes
-           *    all matrixWorld values correctly before we measure.
-           * 2. Apply scale + rotation FIRST.
-           * 3. Force matrix update so Box3 gets accurate world coords.
-           * 4. Measure bbox → compute scale → snap to floor.
-           *
-           * Key: updateMatrixWorld(true) on the group before measuring
-           * guarantees correct results regardless of GLB authoring style.
-           */
-
-          // Step 1: Put model in a container group at world origin
           const pivot = new THREE.Group();
           pivot.add(model);
-          scene.add(pivot);  // must be in scene for matrixWorld to compute
+          scene.add(pivot);
 
-          // Step 2: measure raw size with model at identity transform
           model.rotation.set(0, 0, 0);
           model.position.set(0, 0, 0);
           model.scale.set(1, 1, 1);
@@ -371,23 +400,18 @@ function ThreeCanvas({ room, items, furnitureMap }) {
           const rawSize = new THREE.Vector3();
           rawBox.getSize(rawSize);
 
-          // Step 3: compute uniform scale to fit DB dimensions
           let s = userScale;
           if (rawSize.x > 1e-5 && rawSize.y > 1e-5 && rawSize.z > 1e-5) {
             s = Math.min(dbW_m / rawSize.x, dbH_m / rawSize.y, dbD_m / rawSize.z) * userScale;
           }
           model.scale.setScalar(s);
-
-          // Step 4: apply rotation BEFORE measuring final bbox
           model.rotation.y = rotY;
           pivot.updateMatrixWorld(true);
 
-          // Step 5: measure bbox AFTER scale + rotation
           const scaledBox    = new THREE.Box3().setFromObject(pivot);
           const scaledCenter = new THREE.Vector3();
           scaledBox.getCenter(scaledCenter);
 
-          // Step 6: position — centre on posX/posZ, snap bottom to floor y=0
           pivot.position.x = posX - scaledCenter.x;
           pivot.position.z = posZ - scaledCenter.z;
           pivot.position.y = -scaledBox.min.y;
@@ -436,8 +460,9 @@ function ThreeCanvas({ room, items, furnitureMap }) {
   return <div ref={mountRef} style={{ width: "100%", height: "100%" }} />;
 }
 
-/* ── Helpers ── */
-
+/* ═══════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════ */
 function loadGLTF(loader, url) {
   return new Promise((resolve, reject) =>
     loader.load(url, resolve, undefined, reject)
@@ -450,8 +475,7 @@ function addFallbackBox(scene, posX, posZ, rotY, w, h, d, scale, ci) {
     new THREE.BoxGeometry(fw, fh, fd),
     new THREE.MeshStandardMaterial({
       color: categoryColor(ci?.category || ""),
-      roughness: 0.75,
-      metalness: 0.1,
+      roughness: 0.75, metalness: 0.1,
     })
   );
   box.position.set(posX, fh / 2, posZ);
@@ -485,6 +509,7 @@ function StatCard({ label, value, accent }) {
     </div>
   );
 }
+
 function ColorChip({ color, label }) {
   return (
     <span className="r3d-chip">
@@ -493,6 +518,7 @@ function ColorChip({ color, label }) {
     </span>
   );
 }
+
 function DItem({ label, value }) {
   return (
     <div className="r3d-ditem">
