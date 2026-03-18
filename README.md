@@ -50,7 +50,7 @@ Demo video: [YouTube Presentation](https://youtu.be/OCuMy6rpfVM)
 | Deshani Kudaralage (10952996) | Requirements Evaluation | Surveys, interviews, SUS testing, feedback |
 | Rayigamage Gunawardhana (10952738) | Furniture Module    | CRUD, GLB upload, inventory |
 
-PUSL3122 HCI Coursework, NSBM Green University. 
+PUSL3122 HCI Coursework, NSBM Green University | University of Plymouth 
 
 ## HCI Evaluation
 
